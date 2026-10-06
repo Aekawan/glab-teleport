@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-10-06
+
+### Added
+- `--json` on every command: one JSON document on stdout, progress on stderr. Write commands only plan unless `--yes` is given.
+- Claude Code skill bundled with the package: `glab-teleport skill install` (safe agent workflow, JSON field reference).
+- Read-only mode: `glab-teleport config read_only true` or `GLAB_TELEPORT_READ_ONLY=1` turns every write into a plan.
+
+### Fixed
+- `verify` counts source projects that are not on the target yet: the Projects row shows e.g. `11 → 6 ✗` instead of
+  `6/6 ✓`, and `--json` reports `"complete": false` with `not_on_target`.
+- Plans describe a match as "N shared commits" (several branches can share one commit) instead of "N matching refs".
+
 ## [0.3.0] — 2026-10-06
 
 ### Added

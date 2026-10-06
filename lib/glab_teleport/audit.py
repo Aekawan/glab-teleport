@@ -86,6 +86,8 @@ def run(args):
     if unpaired:
         md += [f"## {t('Only on target', 'มีเฉพาะที่ปลายทาง')} ({len(unpaired)})", ""] + [f"- `{p}`" for p in unpaired] + [""]
     (out_dir / "audit.md").write_text("\n".join(md))
+    term.emit({"ok": True, "report_path": str(out_dir / "audit.md"), "summary": dict(tot),
+               "by_group": {g: dict(c) for g, c in by_group.items()}, "rows": rows, "target_only": unpaired})
     term.out("")
     term.kv([(t("Report", "รายงาน"), str(out_dir / "audit.md"))])
     return 0

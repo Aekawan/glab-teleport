@@ -244,6 +244,40 @@ class TeleportEndToEnd(unittest.TestCase):
         self.assertIn("in sync", out.getvalue())
 
 
+    def cli_json(self, *argv):
+        from glab_teleport import cli, term
+        term.RESULT = None
+        out = io.StringIO()
+        with redirect_stdout(out):
+            with self.assertRaises(SystemExit) as ex:
+                cli.main([*argv, "--json", "--source-url", self.src.url, "--target-url", self.dst.url])
+        term.set_json(False)
+        return ex.exception.code, json.loads(out.getvalue())
+
+    def test_json_mode_for_agents(self):
+        code, plan = self.cli_json("project", "team/api", "org")            # no --yes: plan only, nothing written
+        self.assertEqual((code, plan["mode"], plan["confirmed"]), (0, "plan", False))
+        self.assertEqual(plan["summary"]["new"], 1)
+        self.assertIn("next", plan)
+        self.assertFalse(any(p["path_with_namespace"] == "org/api" for p in self.dst.projects.values()))
+        code, res = self.cli_json("project", "team/api", "org", "--only", "repo,env", "--yes")
+        self.assertEqual((code, res["ok"], res["counts"]["ok"]), (0, True, 1), res)
+        self.assertTrue(Path(res["report_path"]).exists())
+        code, ver = self.cli_json("verify", "team", "org", "--only", "repo,env")
+        self.assertEqual((ver["complete"], ver["not_on_target"]), (True, 0), ver)
+        self.src.add_project("team/web")                                     # a project that was never migrated
+        code, ver = self.cli_json("verify", "team", "org", "--only", "repo,env")
+        self.assertEqual((code, ver["ok"], ver["complete"], ver["not_on_target"]), (1, False, False, 1), ver)
+        self.assertEqual(ver["counts"]["ok"], 1)                             # what is there still checks out
+        code, err = self.cli_json("sync")                                     # no interactive picker in JSON mode
+        self.assertEqual((code, err["ok"]), (1, False))
+        from glab_teleport import cli, term
+        out = io.StringIO()
+        with redirect_stdout(out), self.assertRaises(SystemExit):
+            cli.main(["--version", "--json"])
+        term.set_json(False)
+        self.assertEqual(json.loads(out.getvalue())["ok"], True)
+
     def sync_args(self, **kw):
         return argparse.Namespace(**{**dict(source_url=self.src.url, target_url=self.dst.url, insecure=False, only=None, prune=False,
                                             no_overwrite=False, dry_run=False, yes=True, layout=None, force_push=False, rewrite_urls=False,

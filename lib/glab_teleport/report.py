@@ -33,6 +33,13 @@ def status_text(st):
             "fail": t("failed", "ไม่สำเร็จ"), "skip": t("skipped", "ข้าม"), "info": "info"}[st]
 
 
+def project_counts(rep):
+    """(source, target) project counts; a verify also counts source projects that are not on the target yet."""
+    present = sum(1 for p in rep["projects"] if not any(i["area"] == "project" for i in p["issues"]))
+    total = len(rep["projects"]) + (len(rep["skipped"]) if rep["mode"] == "verify" else 0)
+    return total, present
+
+
 def build(s, plan, components, items, projects, groups, started, mode="teleport"):
     tot, scopes = totals(projects, groups)
     by_src = {p["source"]: p for p in projects}
@@ -69,8 +76,7 @@ def print_summary(rep, run_dir):
         mark = term.style("✓", "green") if ok else term.style("✗", "red")
         rows.append(((" " * 2 if indent else "") + label, str(a), str(b), mark if not indent else ""))
 
-    n_proj = len(rep["projects"])
-    line(t("Projects", "Project"), n_proj, sum(1 for p in rep["projects"] if not any(i["area"] == "project" for i in p["issues"])))
+    line(t("Projects", "Project"), *project_counts(rep))
     comps = rep["components"]
     if "repo" in comps:
         line(t("Branches", "Branch"), tot.get("source_branches", 0), tot.get("source_branches", 0) - _ref_gap(rep, "branch"))
@@ -185,7 +191,7 @@ def markdown(rep):
     def row(label, a, b):
         L.append(f"| {label} | {a} | {b} | {'✅' if a == b else '❌'} |")
     comps = rep["components"]
-    row(t("Projects", "Project"), len(rep["projects"]), sum(1 for p in rep["projects"] if not any(i["area"] == "project" for i in p["issues"])))
+    row(t("Projects", "Project"), *project_counts(rep))
     if "repo" in comps:
         row(t("Branches", "Branch"), tot.get("source_branches", 0), tot.get("source_branches", 0) - _ref_gap(rep, "branch"))
         row(t("Tags", "Tag"), tot.get("source_tags", 0), tot.get("source_tags", 0) - _ref_gap(rep, "tag"))

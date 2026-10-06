@@ -81,6 +81,9 @@ def defaults(args):
 
 
 def run(args):
+    if term.JSON:
+        raise SystemExit(t("Interactive mode is not available with --json. Use a command such as: glab-teleport group <source> <target> --json",
+                           "ใช้โหมดเลือกจากรายการร่วมกับ --json ไม่ได้ ใช้คำสั่งตรง เช่น glab-teleport group <ต้นทาง> <ปลายทาง> --json"))
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         raise SystemExit(t("Interactive mode needs a terminal. Use: glab-teleport group <source> <target>",
                            "โหมดเลือกจากรายการต้องรันใน terminal หรือใช้: glab-teleport group <ต้นทาง> <ปลายทาง>"))

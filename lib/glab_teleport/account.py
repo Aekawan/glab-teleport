@@ -178,6 +178,9 @@ def _login_side(args, side, cfg):
 
 
 def cmd_login(args):
+    if term.JSON and not args.token_stdin:
+        raise SystemExit(t("login is interactive. Ask the user to run `glab-teleport login` in their own terminal — never handle tokens yourself.",
+                           "login ต้องทำแบบโต้ตอบ ให้ผู้ใช้รัน `glab-teleport login` ใน terminal ของตัวเอง — ห้ามจัดการ token แทน"))
     if not sys.stdin.isatty() and not args.token_stdin:
         raise SystemExit(t("login needs an interactive terminal (or use --side source --token-stdin).",
                            "login ต้องรันใน terminal (หรือใช้ --side source --token-stdin)"))
@@ -207,8 +210,12 @@ def cmd_doctor(args):
     from datetime import date
     bad = [0]
 
+    checks = []
+
     def line(good, text, hint="", warn=False):
         bad[0] += 0 if good or warn else 1
+        checks.append({"ok": bool(good), "level": "ok" if good else "warn" if warn else "fail",
+                       "check": term.strip_ansi(text), "hint": hint if not good else ""})
         sym = term.style("✓", "green") if good else term.style("!", "yellow") if warn else term.style("✗", "red")
         term.out(f"  {sym} {text}" + (term.style(f"  → {hint}", "yellow") if hint and not good else ""))
 
@@ -269,6 +276,7 @@ def cmd_doctor(args):
     if urls.get("source") and urls.get("source") == urls.get("target"):
         term.out(term.style("\n  ! " + t("Source and target are the same GitLab. For moves inside one instance, GitLab's own Transfer is faster.",
                                          "ต้นทางและปลายทางเป็น GitLab เดียวกัน หากย้ายภายในระบบเดียวกัน ใช้ Transfer ของ GitLab จะเร็วกว่า"), "yellow"))
+    term.emit({"ok": not bad[0], "problems": bad[0], "source": urls.get("source"), "target": urls.get("target"), "checks": checks})
     term.out("")
     term.out(term.style(t("All set. Run: glab-teleport", "พร้อมใช้งาน เริ่มได้ด้วยคำสั่ง: glab-teleport"), "green") if not bad[0]
              else term.style(t("{n} problem(s) to fix (see → above).", "พบ {n} รายการที่ต้องแก้ไข (ดู → ด้านบน)", n=bad[0]), "red"))
@@ -278,16 +286,19 @@ def cmd_doctor(args):
 def cmd_config(args):
     cfg = config.load_config()
     if not args.key:
-        term.kv([(k, str(cfg.get(k, "—"))) for k in ("lang", "source", "target")])
+        term.emit({"ok": True, **{k: cfg.get(k) for k in ("lang", "source", "target", "read_only")}, "file": str(config.CONFIG_FILE)})
+        term.kv([(k, str(cfg.get(k, "—"))) for k in ("lang", "source", "target", "read_only")])
         term.out(term.style(f"\n  {config.CONFIG_FILE}", "dim"))
         return
     key = args.key.lower()
-    if key not in ("lang", "source", "target"):
-        raise SystemExit(t("Unknown key '{k}'. Use: lang, source, target", "ไม่รู้จัก '{k}' ใช้ได้: lang, source, target", k=key))
+    if key not in ("lang", "source", "target", "read_only"):
+        raise SystemExit(t("Unknown key '{k}'. Use: lang, source, target, read_only", "ไม่รู้จัก '{k}' ใช้ได้: lang, source, target, read_only", k=key))
     if args.value is None:
         return term.out(str(cfg.get(key, "")))
     value = args.value.strip()
-    if key == "lang":
+    if key == "read_only":
+        value = value.lower() in ("1", "true", "on", "yes")
+    elif key == "lang":
         if value not in ("en", "th"):
             raise SystemExit(t("Language must be en or th", "ภาษาต้องเป็น en หรือ th"))
         set_lang(value)

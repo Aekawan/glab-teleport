@@ -144,7 +144,7 @@ def plan_group(session, src_path, dst_path, layout="keep", include=None, exclude
         if sp in content or prev:
             if sp in content:
                 dp, n = content[sp]
-                why = t("already on target ({n} matching refs)", "มีอยู่ที่ปลายทางแล้ว (ref ตรงกัน {n})", n=n)
+                why = t("already on target (matched by {n} shared commits)", "มีอยู่ที่ปลายทางแล้ว (commit ตรงกัน {n})", n=n)
             else:  # an earlier run put it there (e.g. an empty repository has no commits to match)
                 dp, why = dmap[prev.lower()]["path_with_namespace"], t("teleported here before", "เคยย้ายมาไว้ที่นี่แล้ว")
                 taken.add(dp)

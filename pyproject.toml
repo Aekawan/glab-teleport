@@ -32,5 +32,8 @@ glab-teleport = "glab_teleport.cli:main"
 package-dir = { "" = "lib" }
 packages = ["glab_teleport"]
 
+[tool.setuptools.package-data]
+glab_teleport = ["skill/*.md", "skill/references/*.md"]
+
 [tool.setuptools.dynamic]
 version = { attr = "glab_teleport.__version__" }

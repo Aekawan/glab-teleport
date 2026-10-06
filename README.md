@@ -7,7 +7,7 @@
 ![python](https://img.shields.io/badge/python-%3E%3D3.9-informational)
 ![dependencies](https://img.shields.io/badge/dependencies-none-success)
 
-[ภาษาไทย](README.th.md) · [Install](#install) · [Quick start](#quick-start) · [Commands](#commands) · [Sync](#keep-the-target-up-to-date-sync) · [How it works](#how-it-works) · [Safety](#safety-and-privacy) · [FAQ](#faq)
+[ภาษาไทย](README.th.md) · [Install](#install) · [Quick start](#quick-start) · [Commands](#commands) · [Sync](#keep-the-target-up-to-date-sync) · [AI agents](#use-with-ai-agents) · [How it works](#how-it-works) · [Safety](#safety-and-privacy) · [FAQ](#faq)
 
 ---
 
@@ -173,6 +173,30 @@ glab-teleport sync payments --prune         # also remove what was deleted on th
 - **Tells you what's safe.** Each project shows whether the target is just behind (updated) or has its own commits (kept, never overwritten).
 - **Never destructive by default.** Things deleted on the source are only removed on the target with `--prune`. Branches that someone changed on the target are reported, never overwritten (unless `--force-push`). Use `--no-overwrite` to only add what is missing.
 - **No pipelines.** Pushes use `ci.skip`, so syncing never starts builds or deployments on the target.
+
+## Use with AI agents
+
+glab-teleport is built to be driven by AI coding agents (Claude Code, Codex, Cursor and others) without risk.
+
+**Claude Code skill.** One command installs a skill. It teaches the agent the safe workflow: check the setup, plan first, ask you before anything is written, never touch tokens, and summarise the report.
+
+```bash
+glab-teleport skill install        # → ~/.claude/skills/glab-teleport (restart Claude Code)
+```
+
+Then just ask, e.g. *"sync payments to the new GitLab"* or *"check that all CI/CD variables of payments made it across"*.
+
+**`--json` for any agent or script.**
+- Every command prints one JSON document on stdout; progress goes to stderr.
+- With `--json`, write commands only **plan** unless `--yes` is given, so an agent can't change anything by accident.
+- The field reference is in [`lib/glab_teleport/skill/references/json.md`](lib/glab_teleport/skill/references/json.md).
+
+```bash
+glab-teleport sync payments --json            # plan only: {"mode": "plan", "summary": {...}, "items": [...]}
+glab-teleport sync payments --json --yes      # run it after a human approved the plan
+```
+
+**Read-only machines.** `glab-teleport config read_only true` (or `GLAB_TELEPORT_READ_ONLY=1`) turns every write into a plan, whatever flags are passed.
 
 ## How it works
 

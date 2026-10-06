@@ -19,9 +19,30 @@ STYLES = {"bold": "1", "dim": "2", "red": "31", "green": "32", "yellow": "33", "
 SYM = {"ok": "✓", "fail": "✗", "warn": "!", "new": "+", "update": "↻", "move": "↪", "skip": "–", "info": "·", "manual": "☞"}
 
 
+JSON = False      # --json: humans read stderr, programs read one JSON document on stdout
+RESULT = None
+
+
 def set_color(enabled):
     global COLOR
     COLOR = enabled
+
+
+def set_json(enabled):
+    global JSON, COLOR
+    JSON = enabled
+    if enabled:
+        COLOR = False
+
+
+def emit(obj):
+    """Record the machine-readable result of the command (printed once, on stdout, when --json is used)."""
+    global RESULT
+    RESULT = obj
+
+
+def _stream():
+    return sys.stderr if JSON else sys.stdout
 
 
 def style(text, *names):
@@ -103,7 +124,7 @@ def out(line=""):
     with _out_lock:
         if Status.active:
             Status.active.clear()
-        print(line, flush=True)
+        print(line, file=_stream(), flush=True)
         if Status.active:
             Status.active.draw()
 
@@ -160,7 +181,7 @@ class Status:
     FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
     def __init__(self, text=""):
-        self.text, self.i, self.tty = text, 0, sys.stdout.isatty()
+        self.text, self.i, self.tty = text, 0, sys.stdout.isatty() and not JSON
         self._stop = threading.Event()
 
     def __enter__(self):
@@ -199,7 +220,7 @@ class Status:
 
 # ── prompts ──
 def confirm(question, default=False):
-    if not sys.stdin.isatty():
+    if JSON or not sys.stdin.isatty():
         return default
     hint = "[Y/n]" if default else "[y/N]"
     ans = input(f"{question} {style(hint, 'dim')} ").strip().lower()

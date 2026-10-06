@@ -1,5 +1,6 @@
 """The teleport and verify flows shared by the CLI and the interactive wizard."""
 import json
+import os
 import sys
 import time
 
@@ -44,9 +45,17 @@ def equivalent(kind, srcs, dst, components, args):
     return " ".join(parts)
 
 
+def read_only():
+    return bool(os.environ.get("GLAB_TELEPORT_READ_ONLY") or config.load_config().get("read_only"))
+
+
 def teleport(args, kind, srcs, dst, components, s=None, interactive=False):
     s = s or session(args)
     sync = s.opt("sync")
+    if read_only() and not s.opt("dry_run"):
+        s.opts["dry_run"] = True
+        term.out(term.style(t("Read-only mode is on (config read_only / GLAB_TELEPORT_READ_ONLY): showing the plan only.",
+                              "เปิดโหมดอ่านอย่างเดียวอยู่ (config read_only / GLAB_TELEPORT_READ_ONLY): แสดงแผนอย่างเดียว"), "yellow"))
     header(s)
     with term.Status(t("Planning…", "กำลังวางแผน…")) as st:
         plan = build_plan(s, args, kind, srcs, dst, st)
@@ -58,6 +67,7 @@ def teleport(args, kind, srcs, dst, components, s=None, interactive=False):
         term.kv([(t("Command", "คำสั่ง"), term.style(equivalent(kind, srcs, dst, components, args), "dim"))])
     items = [i for i in plan["items"] if i["state"] != SKIP or (i.get("conflict") and s.opt("force_push"))]
     moves = [i for i in items if i["state"] == MOVE]
+    term.emit(plan_json(s, plan, components, sync, confirmed=False))
     if moves and plan.get("access", 50) < 50:
         term.out("")
         term.out(term.style("  ✗ " + t("{n} projects need to be moved, which requires the Owner role on {g} (you are Maintainer). "
@@ -66,9 +76,12 @@ def teleport(args, kind, srcs, dst, components, s=None, interactive=False):
                                        "กรุณาขอสิทธิ์ Owner หรือให้ Owner เป็นผู้รันคำสั่งนี้ ยังไม่มีการเปลี่ยนแปลงใดๆ",
                                        n=len(moves), g=plan["target"]), "red"))
         return 1
-    if s.opt("dry_run"):
+    if s.opt("dry_run") or (term.JSON and not s.opt("yes")):
         term.out("")
         term.out(term.style(t("Dry run — nothing was changed.", "Dry run — ยังไม่มีการเปลี่ยนแปลงใดๆ"), "dim"))
+        if term.JSON and not s.opt("dry_run"):
+            term.RESULT["next"] = t("Nothing was changed. Show this plan to the user; after they approve, run the same command with --yes.",
+                                    "ยังไม่มีการเปลี่ยนแปลง ให้ผู้ใช้ตรวจแผนนี้ก่อน เมื่อผู้ใช้อนุมัติแล้วจึงรันคำสั่งเดิมพร้อม --yes")
         return 0
     if not items:
         term.out("")
@@ -94,7 +107,30 @@ def teleport(args, kind, srcs, dst, components, s=None, interactive=False):
     rep = report.build(s, plan, components, executed, projects, groups, started, mode="sync" if sync else "teleport")
     report.write(rep, s.run_dir)
     report.print_summary(rep, s.run_dir)
+    term.emit({"ok": not rep["counts"]["fail"], "report_path": str(s.run_dir / "report.md"), **rep})
     return 1 if rep["counts"]["fail"] else 0
+
+
+def plan_json(s, plan, components, sync=False, confirmed=False):
+    """Plan as plain data for agents (no API objects)."""
+    from collections import Counter as _C
+    items = [{"source": i["source"], "target": i["target"], "state": i["state"], "reason": term.strip_ansi(i.get("reason") or ""),
+              "move_from": i.get("move_from"), "archived": i.get("archived"), "conflict": bool(i.get("conflict")),
+              "code": i.get("sync")} for i in plan["items"]]
+    counts = _C(i["state"] for i in plan["items"])
+    warnings = []
+    if any(i["state"] == MOVE for i in plan["items"]) and plan.get("access", 50) < 50:
+        warnings.append(t("moves need the Owner role on the target group", "การย้ายตำแหน่งต้องเป็น Owner ของ group ปลายทาง"))
+    diverged = [i["source"] for i in plan["items"] if (i.get("sync") or {}).get("diverged")]
+    if diverged:
+        warnings.append(t("{n} projects have commits on the target that are not on the source; those branches are kept",
+                          "{n} project มี commit ที่ปลายทางซึ่งต้นทางไม่มี branch เหล่านั้นจะไม่ถูกเขียนทับ", n=len(diverged)))
+    return {"ok": True, "mode": "plan", "command": "sync" if sync else plan["kind"], "kind": plan["kind"], "source": plan["source"],
+            "target": plan["target"], "target_exists": plan.get("target_exists"), "layout": plan.get("layout"),
+            "components": components, "options": {k: v for k, v in s.opts.items() if v and k in ("relocate", "prune", "overwrite",
+                                                  "force_push", "rewrite_urls", "with_parent_vars", "activate_schedules")},
+            "summary": {"projects": len(plan["items"]), **{k: counts.get(k, 0) for k in (NEW, SYNCED, UPDATE, MOVE, SKIP)}},
+            "warnings": warnings, "items": items, "confirmed": confirmed, "source_url": s.src.url, "target_url": s.dst.url}
 
 
 def verify(args, kind, srcs, dst, components):
@@ -110,7 +146,10 @@ def verify(args, kind, srcs, dst, components):
         if i["state"] == NEW:
             i["reason"] = t("not on target yet", "ยังไม่มีที่ปลายทาง")
     if not present:
-        term.out(t("Nothing to verify — none of these projects exist on the target yet.", "ไม่มีรายการให้ตรวจ — ยังไม่มี project เหล่านี้ที่ปลายทาง"))
+        msg = t("Nothing to verify — none of these projects exist on the target yet.", "ไม่มีรายการให้ตรวจ — ยังไม่มี project เหล่านี้ที่ปลายทาง")
+        term.out(msg)
+        term.emit({"ok": False, "complete": False, "error": msg, "not_on_target": [
+            {"source": i["source"], "target": i["target"], "reason": i["reason"]} for i in plan["items"]]})
         return 1
     s.rewriter = build_rewriter(s, plan["items"])
     started = time.time()
@@ -120,7 +159,10 @@ def verify(args, kind, srcs, dst, components):
     rep = report.build(s, plan, components, present, projects, groups, started, mode="verify")
     report.write(rep, s.run_dir)
     report.print_summary(rep, s.run_dir)
-    return 1 if rep["counts"]["fail"] else 0
+    complete = not rep["counts"]["fail"] and not rep["skipped"]
+    term.emit({"ok": complete, "complete": complete, "not_on_target": len(rep["skipped"]),
+               "report_path": str(s.run_dir / "report.md"), **rep})
+    return 0 if complete else 1
 
 
 def show_report(args):
@@ -129,6 +171,9 @@ def show_report(args):
         term.out(t("No runs yet.", "ยังไม่มีประวัติการทำงาน"))
         return 0
     if not args.run:
+        term.emit({"ok": True, "runs": [{"id": d.name, **{k: v for k, v in json.loads((d / "report.json").read_text()).items()
+                                                         if k in ("mode", "kind", "source", "target", "started", "counts")},
+                                         "report_path": str(d / "report.md")} for d in runs[:50]]})
         rows = []
         for d in runs[:20]:
             rep = json.loads((d / "report.json").read_text())
@@ -142,7 +187,9 @@ def show_report(args):
     d = runs[0] if args.run == "latest" else next((r for r in runs if r.name.startswith(args.run)), None)
     if not d:
         raise SystemExit(t("Run '{r}' not found.", "ไม่พบรอบ '{r}'", r=args.run))
-    report.print_summary(json.loads((d / "report.json").read_text()), d)
+    rep = json.loads((d / "report.json").read_text())
+    term.emit({"ok": not rep["counts"].get("fail"), "report_path": str(d / "report.md"), **rep})
+    report.print_summary(rep, d)
     return 0
 
 
@@ -158,6 +205,8 @@ def sync(args, source=None, target=None):
             choices = history.sync_targets(work)
             raise SystemExit(t("Choose what to sync: glab-teleport sync <source> [target]\n", "เลือกสิ่งที่จะ sync: glab-teleport sync <ต้นทาง> [ปลายทาง]\n")
                              + "\n".join(f"  {c['source']}  →  {c['target']}" for c in choices))
+        if term.JSON:
+            raise SystemExit(t("Give the source: glab-teleport sync <source> [target] --json", "ระบุต้นทาง: glab-teleport sync <ต้นทาง> [ปลายทาง] --json"))
         from .wizard import pick_sync
         picked = pick_sync(s)
         if not picked:
@@ -172,7 +221,7 @@ def sync(args, source=None, target=None):
     if not target:  # never teleported with this tool: suggest where it belongs and ask
         from .wizard import guess_target, load_lists
         guess = guess_target(kind, source, load_lists(s)[1], history.known_pairs(work))
-        if guess and sys.stdin.isatty() and term.confirm(t("Sync {a} → {b}?", "sync {a} → {b} หรือไม่", a=source, b=guess), True):
+        if guess and sys.stdin.isatty() and not term.JSON and term.confirm(t("Sync {a} → {b}?", "sync {a} → {b} หรือไม่", a=source, b=guess), True):
             target = guess
         else:
             raise SystemExit(t("Where should '{p}' go on the target? Run: glab-teleport sync {p} <target>",

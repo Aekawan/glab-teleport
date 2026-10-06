@@ -1,5 +1,6 @@
 """Command line entry point."""
 import argparse
+import json
 import os
 import sys
 
@@ -8,7 +9,7 @@ from .gitlab import connect
 from .i18n import resolve_lang, set_lang, t
 from .plan import COMPONENTS, clean_path, parse_only
 
-COMMANDS = ("group", "project", "sync", "verify", "report", "audit", "refs", "repoint", "login", "logout", "doctor", "config")
+COMMANDS = ("group", "project", "sync", "verify", "skill", "report", "audit", "refs", "repoint", "login", "logout", "doctor", "config")
 
 
 def _common(p):
@@ -18,6 +19,9 @@ def _common(p):
     g.add_argument("--insecure", action="store_true", help=t("skip TLS certificate verification", "ไม่ตรวจสอบใบรับรอง TLS"))
     g.add_argument("--lang", choices=["en", "th"], help=t("interface language (en, th)", "ภาษาของหน้าจอ (en, th)"))
     g.add_argument("--no-color", action="store_true", help=t("disable colors", "ปิดการแสดงสี"))
+    g.add_argument("--json", action="store_true", help=t("machine-readable output for scripts and AI agents (implies no prompts; "
+                                                         "without --yes nothing is changed)",
+                                                         "ผลลัพธ์แบบ JSON สำหรับสคริปต์และ AI agent (ไม่มีคำถามโต้ตอบ; ถ้าไม่ใส่ --yes จะไม่เปลี่ยนแปลงอะไร)"))
 
 
 def _transfer_opts(p, group=False):
@@ -145,6 +149,13 @@ docs: https://github.com/Aekawan/glab-teleport""",
     p.add_argument("value", nargs="?")
     _common(p)
 
+    p = sub.add_parser("skill", help=t("install the glab-teleport skill so AI agents (Claude Code) can use this tool safely",
+                                       "ติดตั้ง skill ให้ AI agent (Claude Code) ใช้เครื่องมือนี้ได้อย่างปลอดภัย"))
+    p.add_argument("action", choices=["install", "path"], help=t("install: copy the skill; path: show where it is bundled",
+                                                                  "install: คัดลอก skill; path: แสดงตำแหน่งไฟล์ skill"))
+    p.add_argument("--dir", help=t("install into this skills folder (default ~/.claude/skills)", "ติดตั้งลงโฟลเดอร์นี้ (ค่าเริ่มต้น ~/.claude/skills)"))
+    _common(p)
+
     p = sub.add_parser("ui")
     p.add_argument("--refresh", action="store_true", help=t("reload the group/project lists", "โหลดรายการ group/project ใหม่"))
     _common(p)
@@ -200,6 +211,8 @@ def dispatch(args):
         return run.verify(args, kind, [s], clean_path(args.target), parse_only(args.only or "repo,env"))
     if cmd == "refs":
         return refs(args)
+    if cmd == "skill":
+        return skill(args)
     if cmd == "repoint":
         return repoint(args)
 
@@ -223,6 +236,7 @@ def refs(args):
             st.update(t("Scanning {i}/{n} · {p}", "กำลังสแกน {i}/{n} · {p}", i=i, n=len(targets), p=p["path_with_namespace"]))
             scan_project(s, rw, s.dst.get(f"/projects/{p['id']}"), found)
     term.heading(t("References to {h}", "จุดที่ยังอ้างถึง {h}", h=rw.old_host), t("{n} projects scanned", "สแกน {n} project", n=len(targets)))
+    term.emit({"ok": True, "source_host": rw.old_host, "projects_scanned": len(targets), "references": found})
     if not found:
         term.out("  " + term.style("✓ ", "green") + t("Nothing points to the source GitLab.", "ไม่พบการอ้างถึง GitLab ต้นทาง"))
         return 0
@@ -239,6 +253,25 @@ def refs(args):
     return 0
 
 
+def skill(args):
+    import shutil
+    from pathlib import Path
+    src = Path(__file__).resolve().parent / "skill"
+    if args.action == "path":
+        term.emit({"ok": True, "path": str(src)})
+        term.out(str(src))
+        return 0
+    dest = Path(args.dir).expanduser() if args.dir else Path.home() / ".claude" / "skills"
+    target = dest / "glab-teleport"
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(src, target)
+    term.emit({"ok": True, "installed": str(target)})
+    term.out(term.style("✓ ", "green") + t("Skill installed to {p}. Restart your Claude Code session to load it.",
+                                           "ติดตั้ง skill ที่ {p} แล้ว เปิด Claude Code session ใหม่เพื่อให้โหลด skill", p=target))
+    return 0
+
+
 def repoint(args):
     from pathlib import Path
     from .run import session
@@ -252,6 +285,7 @@ def repoint(args):
     out = Path(args.output)
     out.write_text(repoint_script(s.src, https, ssh, pairs))
     out.chmod(0o755)
+    term.emit({"ok": True, "script": str(out.resolve()), "repositories": len(pairs)})
     term.out(term.style("✓ ", "green") + t("{f} covers {n} repositories. Share it with your team:", "สร้าง {f} สำหรับ {n} repository แล้ว ส่งให้ทีมใช้ได้เลย:", f=out, n=len(pairs)))
     term.out(term.style(f"  ./{out.name} ~/code            " + t("# preview", "# ดูตัวอย่าง"), "dim"))
     term.out(term.style(f"  ./{out.name} --apply ~/code    " + t("# change remotes", "# เปลี่ยน remote"), "dim"))
@@ -268,7 +302,7 @@ def _strip_globals(argv):
         if a == "--lang":
             skip = True
             continue
-        if a.startswith("--lang=") or a == "--no-color":
+        if a.startswith("--lang=") or a in ("--no-color", "--json"):
             continue
         out.append(a)
     return out
@@ -289,9 +323,34 @@ def main(argv=None):
         argparse._ = lambda s: ARGPARSE_TH.get(s, s)
     if "--no-color" in argv:
         term.set_color(False)
+    as_json = "--json" in argv
+    if as_json:
+        term.set_json(True)
     argv = _strip_globals(argv)
+    if as_json:
+        code = 0
+        try:
+            main_inner(argv)
+        except SystemExit as e:
+            code = e.code if isinstance(e.code, int) else 1
+            if isinstance(e.code, str) and (term.RESULT is None or term.RESULT.get("ok") is not False):
+                term.emit({"ok": False, "error": e.code})
+        except KeyboardInterrupt:
+            code = 130
+            term.emit({"ok": False, "error": "interrupted"})
+        except Exception as e:  # noqa — agents always get valid JSON
+            code = 1
+            term.emit({"ok": False, "error": f"{type(e).__name__}: {e}"})
+        print(json.dumps(term.RESULT if term.RESULT is not None else {"ok": code == 0}, ensure_ascii=False, indent=2, default=str))
+        raise SystemExit(code)
+    main_inner(argv)
+
+
+def main_inner(argv):
     try:
         if argv in (["--version"], ["-V"]):
+            if term.JSON:
+                return term.emit({"ok": True, "version": __version__})
             print(f"glab-teleport {__version__}")
             return 0
         values = {"--source-url", "--target-url"}

@@ -149,11 +149,14 @@ docs: https://github.com/Aekawan/glab-teleport""",
     p.add_argument("value", nargs="?")
     _common(p)
 
-    p = sub.add_parser("skill", help=t("install the glab-teleport skill so AI agents (Claude Code) can use this tool safely",
-                                       "ติดตั้ง skill ให้ AI agent (Claude Code) ใช้เครื่องมือนี้ได้อย่างปลอดภัย"))
+    p = sub.add_parser("skill", help=t("install the glab-teleport skill so AI agents (Claude Code, Codex, OpenCode, pi) can use this tool safely",
+                                       "ติดตั้ง skill ให้ AI agent (Claude Code, Codex, OpenCode, pi) ใช้เครื่องมือนี้ได้อย่างปลอดภัย"))
     p.add_argument("action", choices=["install", "path"], help=t("install: copy the skill; path: show where it is bundled",
                                                                   "install: คัดลอก skill; path: แสดงตำแหน่งไฟล์ skill"))
-    p.add_argument("--dir", help=t("install into this skills folder (default ~/.claude/skills)", "ติดตั้งลงโฟลเดอร์นี้ (ค่าเริ่มต้น ~/.claude/skills)"))
+    p.add_argument("--for", dest="agents", metavar="AGENTS",
+                   help=t("agents to install for: claude, codex, opencode, pi or all (default: the ones found on this machine)",
+                          "ติดตั้งให้ agent เหล่านี้: claude, codex, opencode, pi หรือ all (ค่าเริ่มต้น: ตัวที่พบในเครื่องนี้)"))
+    p.add_argument("--dir", help=t("install into this skills folder instead", "ติดตั้งลงโฟลเดอร์นี้แทน"))
     _common(p)
 
     p = sub.add_parser("ui")
@@ -254,21 +257,29 @@ def refs(args):
 
 
 def skill(args):
-    import shutil
     from pathlib import Path
+    from . import agents
     src = Path(__file__).resolve().parent / "skill"
     if args.action == "path":
         term.emit({"ok": True, "path": str(src)})
         term.out(str(src))
         return 0
-    dest = Path(args.dir).expanduser() if args.dir else Path.home() / ".claude" / "skills"
-    target = dest / "glab-teleport"
-    if target.exists():
-        shutil.rmtree(target)
-    shutil.copytree(src, target)
-    term.emit({"ok": True, "installed": str(target)})
-    term.out(term.style("✓ ", "green") + t("Skill installed to {p}. Restart your Claude Code session to load it.",
-                                           "ติดตั้ง skill ที่ {p} แล้ว เปิด Claude Code session ใหม่เพื่อให้โหลด skill", p=target))
+    if args.dir:
+        plan = {Path(args.dir).expanduser(): []}
+    else:
+        chosen = agents.parse(args.agents) if args.agents else (agents.detect() or ["claude"])
+        plan = agents.plan(chosen)
+    done = [{"path": str(agents.install(src, d)), "agents": a} for d, a in plan.items()]
+    twice = agents.opencode_sees_twice()
+    term.emit({"ok": True, "installed": done, "opencode_duplicate": twice})
+    term.out(term.style("✓ ", "green") + t("Skill installed", "ติดตั้ง skill แล้ว"))
+    term.kv([(", ".join(agents.LABELS[x] for x in i["agents"]) or t("folder", "โฟลเดอร์"), i["path"]) for i in done])
+    term.out(term.style("  " + t("Start a new agent session to load it.", "เปิด session ใหม่ของ agent เพื่อให้โหลด skill"), "dim"))
+    if twice and "opencode" in agents.detect():
+        term.out(term.style("  " + t("OpenCode reads both skill folders, so it will warn about a duplicate skill name. "
+                                     "This is harmless; set OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 to hide the warning.",
+                                     "OpenCode อ่านทั้งสองโฟลเดอร์ จึงจะเตือนว่ามี skill ชื่อซ้ำ ไม่มีผลต่อการทำงาน "
+                                     "ถ้าไม่อยากเห็นคำเตือนให้ตั้ง OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1"), "dim"))
     return 0
 
 

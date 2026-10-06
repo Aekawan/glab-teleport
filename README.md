@@ -176,13 +176,22 @@ glab-teleport sync payments --prune         # also remove what was deleted on th
 
 ## Use with AI agents
 
-glab-teleport is built to be driven by AI coding agents (Claude Code, Codex, Cursor and others) without risk.
+glab-teleport is built to be driven by AI coding agents (Claude Code, Codex, OpenCode, pi and others) without risk.
 
-**Claude Code skill.** One command installs a skill. It teaches the agent the safe workflow: check the setup, plan first, ask you before anything is written, never touch tokens, and summarise the report.
+**Agent skill.** One command installs a skill. It teaches the agent the safe workflow: check the setup, plan first, ask you before anything is written, never touch tokens, and summarise the report.
 
 ```bash
-glab-teleport skill install        # → ~/.claude/skills/glab-teleport (restart Claude Code)
+glab-teleport skill install                  # for the agents found on this machine
+glab-teleport skill install --for codex,pi   # or choose: claude, codex, opencode, pi, all
 ```
+
+| Agent | Skill folder |
+|---|---|
+| Claude Code | `~/.claude/skills` |
+| Codex, pi | `~/.agents/skills` |
+| OpenCode | reads both of the above (or `~/.config/opencode/skills` on its own) |
+
+Start a new agent session afterwards. The skill follows the [Agent Skills](https://agentskills.io) format, so for any other agent that supports it, use `--dir <its skills folder>`. With Codex, allow network access when it asks: glab-teleport talks to both GitLabs. If OpenCode warns about a duplicate skill name (one copy in each folder), that is harmless; `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1` silences it.
 
 Then just ask, e.g. *"sync payments to the new GitLab"* or *"check that all CI/CD variables of payments made it across"*.
 

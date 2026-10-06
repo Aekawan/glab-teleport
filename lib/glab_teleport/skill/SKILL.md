@@ -32,6 +32,8 @@ glab-teleport doctor --json
 
 `doctor` returns `checks[]` with `ok`, `level` and `hint`. If source/target are not configured or not signed in, ask the user to run `glab-teleport login` themselves, then re-run doctor. DNS failures usually mean VPN.
 
+In a sandboxed agent (e.g. Codex), the CLI needs network access to both GitLabs and writes to `~/.glab-teleport` and `~/.config/glab-teleport`. If a command fails with a network or permission error, ask to run it with network access / outside the sandbox. Don't work around it.
+
 ### 1. Work out source and target
 
 - **The user names them:** use their paths (`group/sub/project`). Web URLs and git URLs also work.

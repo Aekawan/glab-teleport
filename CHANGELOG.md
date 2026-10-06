@@ -6,7 +6,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 - `--json` on every command: one JSON document on stdout, progress on stderr. Write commands only plan unless `--yes` is given.
-- Claude Code skill bundled with the package: `glab-teleport skill install` (safe agent workflow, JSON field reference).
+- Agent skill bundled with the package: `glab-teleport skill install` (safe agent workflow, JSON field reference) for
+  Claude Code, Codex, OpenCode and pi. It installs for the agents found on the machine, or pick with
+  `--for claude,codex,opencode,pi|all`; `--dir` for any other Agent Skills folder.
 - Read-only mode: `glab-teleport config read_only true` or `GLAB_TELEPORT_READ_ONLY=1` turns every write into a plan.
 
 ### Fixed

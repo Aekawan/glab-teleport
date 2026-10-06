@@ -294,9 +294,9 @@ glab-teleport sync payments --prune         # ลบสิ่งที่ต้�
 
 ## ใช้กับ AI agent
 
-glab-teleport ออกแบบให้ AI coding agent (เช่น Claude Code, Codex, Cursor) สั่งใช้งานได้อย่างปลอดภัย
+glab-teleport ออกแบบให้ AI coding agent (เช่น Claude Code, Codex, OpenCode, pi) สั่งใช้งานได้อย่างปลอดภัย
 
-**Skill สำหรับ Claude Code:** ติดตั้งด้วยคำสั่งเดียว skill จะสอน agent ให้ทำงานตามลำดับที่ปลอดภัย
+**Skill สำหรับ AI agent:** ติดตั้งด้วยคำสั่งเดียว skill จะสอน agent ให้ทำงานตามลำดับที่ปลอดภัย
 - ตรวจความพร้อมก่อน
 - ดูแผนก่อนทุกครั้ง
 - ถามคุณก่อนเปลี่ยนแปลงอะไร
@@ -304,8 +304,20 @@ glab-teleport ออกแบบให้ AI coding agent (เช่น Claude C
 - สรุปผลจากรายงานให้
 
 ```bash
-glab-teleport skill install        # → ~/.claude/skills/glab-teleport (เปิด Claude Code ใหม่)
+glab-teleport skill install                  # ติดตั้งให้ agent ที่พบในเครื่องนี้
+glab-teleport skill install --for codex,pi   # หรือเลือกเอง: claude, codex, opencode, pi, all
 ```
+
+| Agent | โฟลเดอร์ skill |
+|---|---|
+| Claude Code | `~/.claude/skills` |
+| Codex, pi | `~/.agents/skills` |
+| OpenCode | อ่านได้ทั้งสองโฟลเดอร์ข้างบน (ถ้าใช้ตัวเดียวจะติดตั้งที่ `~/.config/opencode/skills`) |
+
+ติดตั้งเสร็จแล้วให้เปิด session ใหม่ของ agent
+- skill ใช้รูปแบบ [Agent Skills](https://agentskills.io) ถ้าเป็น agent อื่นที่รองรับรูปแบบนี้ ใช้ `--dir <โฟลเดอร์ skill ของ agent นั้น>`
+- **Codex:** ให้กดอนุญาตการเข้าถึง network เมื่อ Codex ถาม เพราะ glab-teleport ต้องเชื่อมต่อ GitLab ทั้งสองฝั่ง
+- **OpenCode:** ถ้าเตือนว่ามี skill ชื่อซ้ำ (เพราะมีสำเนาในทั้งสองโฟลเดอร์) ไม่มีผลต่อการทำงาน ถ้าไม่อยากเห็นคำเตือนให้ตั้ง `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1`
 
 จากนั้นสั่งเป็นภาษาธรรมดาได้เลย เช่น *"ช่วย sync payments ไปที่ GitLab ใหม่"* หรือ *"เช็คว่า CI/CD variables ของ payments ย้ายมาครบไหม"*
 

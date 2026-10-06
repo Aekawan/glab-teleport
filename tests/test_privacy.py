@@ -6,7 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ALLOWED = ("example.com", "example.org", "example.net", "localhost", "127.0.0.1", "gitlab.com", "docs.gitlab.com",
            "npmjs.com", "www.npmjs.com", "registry.npmjs.org", "nodejs.org", "python.org", "www.python.org", "pypi.org",
-           "github.com", "img.shields.io", "keepachangelog.com", "semver.org", "opensource.org", "brew.sh")
+           "github.com", "img.shields.io", "keepachangelog.com", "semver.org", "opensource.org", "brew.sh",
+           "agentskills.io")
 HOST = re.compile(r"(?:https?|ssh)://(?:[^@/\s'\"`]+@)?([a-z0-9.-]+\.[a-z]{2,}|localhost|127\.0\.0\.1)", re.I)
 
 

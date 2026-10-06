@@ -302,44 +302,62 @@ def uses_lfs(repo, refs):
     return bool(p.stdout.strip())
 
 
-def sync_repo(src_gl, dst_gl, src_url, dst_url, repo_dir, force=False, lfs=True, activity=None):
-    """Copy every branch and tag (and LFS objects) from src to dst, then confirm every SHA on the remote.
-    Returns dict(branches, tags, lfs, rejected=[...], mismatched=[...])."""
+def sync_repo(src_gl, dst_gl, src_url, dst_url, repo_dir, force=False, lfs=True, activity=None, prune=False):
+    """Bring every branch and tag on dst up to date with src (plus LFS objects), then confirm every SHA on the remote.
+    Fast path: when both sides already match, nothing is downloaded or pushed.
+    prune=True also deletes branches/tags that no longer exist on src.
+    Returns dict(branches, tags, lfs, updated=[refs], deleted=[refs], rejected=[...], mismatched=[...], empty)."""
     say = activity or (lambda s: None)
+    say(t("comparing", "กำลังเทียบ"))
+    src_refs, dst_refs = ls_remote(src_gl, src_url), ls_remote(dst_gl, dst_url)
+    heads = sum(1 for r in src_refs if r.startswith("refs/heads/"))
+    res = {"branches": heads, "tags": len(src_refs) - heads, "lfs": False, "rejected": [], "mismatched": [],
+           "updated": sorted(r for r, sha in src_refs.items() if dst_refs.get(r) != sha), "deleted": [], "empty": not src_refs}
+    extra = sorted(r for r in dst_refs if r not in src_refs) if prune else []
+    if not src_refs or (not res["updated"] and not extra):
+        return res
     repo_dir = Path(repo_dir)
     if not repo_dir.exists():
         repo_dir.parent.mkdir(parents=True, exist_ok=True)
         run_git(src_gl, ["init", "--bare", "-q", str(repo_dir)])
     _set_remote(src_gl, repo_dir, "src", src_url)
     _set_remote(src_gl, repo_dir, "dst", dst_url)
-    say(t("fetching", "กำลังดึงข้อมูล"))
-    run_git(src_gl, ["fetch", "--prune", "--no-tags", "src", "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"], cwd=repo_dir)
-    refs = local_refs(repo_dir)
-    res = {"branches": sum(1 for r in refs if r.startswith("refs/heads/")), "tags": sum(1 for r in refs if r.startswith("refs/tags/")),
-           "lfs": False, "rejected": [], "mismatched": [], "empty": not refs}
-    if not refs:
-        return res
-    if lfs and uses_lfs(repo_dir, refs):
-        if not shutil.which("git-lfs"):
-            raise GitError(t("Repository uses Git LFS but git-lfs is not installed — nothing was pushed.",
-                             "repository นี้ใช้ Git LFS แต่เครื่องนี้ยังไม่ได้ติดตั้ง git-lfs จึงยังไม่ได้ push"))
-        say("LFS")
-        run_git(src_gl, ["lfs", "fetch", "--all", "src"], cwd=repo_dir)
-        run_git(dst_gl, ["lfs", "push", "--all", "dst"], cwd=repo_dir)
-        res["lfs"] = True
-    say(t("pushing", "กำลัง push"))
-    plus = "+" if force else ""
-    refspecs = [f"{plus}refs/heads/*:refs/heads/*", f"{plus}refs/tags/*:refs/tags/*"]
-    # ci.skip: copying history must never start CI/CD pipelines (builds, deploys) on the target
-    p = run_git(dst_gl, ["-c", "http.postBuffer=524288000", "push", "--porcelain", "-o", "ci.skip", "dst", *refspecs], cwd=repo_dir, check=False)
-    if p.returncode != 0 and "push options" in (p.stderr or ""):
-        p = run_git(dst_gl, ["-c", "http.postBuffer=524288000", "push", "--porcelain", "dst", *refspecs], cwd=repo_dir, check=False)
-    res["rejected"] = [ln.split("\t")[1].split(":")[0] for ln in p.stdout.splitlines() if ln.startswith("!") and ln.count("\t") >= 2]
-    if p.returncode != 0 and not res["rejected"]:
-        raise GitError(dst_gl.scrub(f"git push: {(p.stderr or p.stdout).strip()[-500:]}"))
+    push = lambda *specs: _push(dst_gl, repo_dir, specs)
+    refs = {}
+    if res["updated"]:
+        say(t("fetching", "กำลังดึงข้อมูล"))
+        run_git(src_gl, ["fetch", "--prune", "--no-tags", "src", "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"], cwd=repo_dir)
+        refs = local_refs(repo_dir)
+        if lfs and uses_lfs(repo_dir, refs):
+            if not shutil.which("git-lfs"):
+                raise GitError(t("Repository uses Git LFS but git-lfs is not installed — nothing was pushed.",
+                                 "repository นี้ใช้ Git LFS แต่เครื่องนี้ยังไม่ได้ติดตั้ง git-lfs จึงยังไม่ได้ push"))
+            say("LFS")
+            run_git(src_gl, ["lfs", "fetch", "--all", "src"], cwd=repo_dir)
+            run_git(dst_gl, ["lfs", "push", "--all", "dst"], cwd=repo_dir)
+            res["lfs"] = True
+        say(t("pushing", "กำลัง push"))
+        plus = "+" if force else ""
+        res["rejected"] += push(f"{plus}refs/heads/*:refs/heads/*", f"{plus}refs/tags/*:refs/tags/*")
+    if extra:
+        say(t("pruning", "กำลังลบ ref ที่ต้นทางไม่มีแล้ว"))
+        res["rejected"] += push(*[":" + r for r in extra])
     remote = ls_remote(dst_gl, dst_url)
-    res["mismatched"] = sorted(r for r, s in refs.items() if remote.get(r) != s)
+    res["mismatched"] = sorted(r for r, s in (refs or src_refs).items() if remote.get(r) != s)
+    res["deleted"] = [r for r in extra if r not in remote]
     return res
+
+
+def _push(dst_gl, repo_dir, specs):
+    """git push with ci.skip (copying history must never start pipelines on the target). Returns rejected refs."""
+    base = ["-c", "http.postBuffer=524288000", "push", "--porcelain"]
+    p = run_git(dst_gl, [*base, "-o", "ci.skip", "dst", *specs], cwd=repo_dir, check=False)
+    if p.returncode != 0 and "push options" in (p.stderr or ""):
+        p = run_git(dst_gl, [*base, "dst", *specs], cwd=repo_dir, check=False)
+    rejected = [ln.split("\t")[1].split(":")[-1] for ln in p.stdout.splitlines() if ln.startswith("!") and ln.count("\t") >= 2]
+    if p.returncode != 0 and not rejected:
+        raise GitError(dst_gl.scrub(f"git push: {(p.stderr or p.stdout).strip()[-500:]}"))
+    return rejected
 
 
 def short_ref(r):

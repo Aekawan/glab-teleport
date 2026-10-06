@@ -327,5 +327,36 @@ def print_plan(plan, components, opts):
                                      n=len(moved_elsewhere)), "yellow"))
 
 
+def print_sync_plan(plan, components, opts):
+    items = plan["items"]
+    term.heading(t("Sync", "Sync"), f"{plan['kind']} · {plan['source']} → {plan['target']}")
+    term.out("")
+    flags = [("--prune", opts.get("prune")), ("--no-overwrite", not opts.get("overwrite"))]
+    term.kv([(t("Transfer", "สิ่งที่ sync"), "  ".join(term.style(c, "bold") for c in components)),
+             (t("Rule", "หลักการ"), t("the source wins: changed values on the target are updated", "ยึดต้นทางเป็นหลัก: ค่าที่ต่างกันที่ปลายทางจะถูกอัปเดต")
+              if opts.get("overwrite") else t("only add what is missing", "เพิ่มเฉพาะสิ่งที่ยังไม่มี"))]
+            + ([(t("Options", "ตัวเลือก"), ", ".join(f for f, on in flags if on))] if any(on for _, on in flags) else []))
+    src_root = plan["source"] + "/" if plan["kind"] == "group" else ""
+    rel = lambda p: p[len(src_root):] if src_root and p.startswith(src_root) else p
+    rows = []
+    for i in items:
+        if i["state"] == SYNCED:
+            continue
+        note = i["reason"] if i["state"] in (SKIP, MOVE, NEW) else describe_sync(i["sync"])
+        if i["state"] == NEW:
+            note = t("new on the source", "มีใหม่ที่ต้นทาง")
+        rows.append((state_label(i["state"]), rel(i["source"]), term.style(note, "dim")))
+    term.out("")
+    if rows:
+        term.table([t("STATUS", "สถานะ"), t("SOURCE", "ต้นทาง"), ""], rows, paths=(1,))
+    same = sum(1 for i in items if i["state"] == SYNCED)
+    if same:
+        term.out(term.style("  ✓ " + t("{n} projects: code already up to date — variables, rules and settings are still checked",
+                                       "{n} project: code เป็นปัจจุบันแล้ว — ยังตรวจตัวแปร กฎ และค่าตั้งให้", n=same), "dim"))
+    c = Counter(i["state"] for i in items)
+    if c[SKIP]:
+        term.out(term.style("  " + t("Projects marked 'skip' are left untouched.", "project ที่ 'ข้าม' จะไม่ถูกแตะต้อง"), "dim"))
+
+
 def strip_sym(s):
     return term.strip_ansi(s)[2:]

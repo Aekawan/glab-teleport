@@ -8,6 +8,7 @@ from pathlib import Path
 from . import __version__, term
 from .i18n import lang, t
 from .plan import SKIP
+from .transfer import change_summary
 from .verify import totals
 
 ICON = {"ok": "✓", "warn": "!", "manual": "☞", "fail": "✗", "info": "·"}
@@ -17,7 +18,7 @@ LEVEL_ORDER = {"info": 0, "manual": 1, "warn": 2, "fail": 3}
 
 
 def skipped_word(rep):
-    return t("skipped", "ข้าม") if rep["mode"] == "teleport" else t("not on target yet", "ยังไม่ได้ย้าย")
+    return t("skipped", "ข้าม") if rep["mode"] != "verify" else t("not on target yet", "ยังไม่ได้ย้าย")
 
 
 def new_run_dir(work, label):
@@ -46,7 +47,8 @@ def build(s, plan, components, items, projects, groups, started, mode="teleport"
         "components": components, "options": {k: v for k, v in s.opts.items() if v and k not in ("jobs",)},
         "counts": counts, "totals": dict(tot), "scopes": scopes,
         "projects": [{**by_src.get(i["source"], {"source": i["source"], "target": i["target"], "status": "fail", "issues": []}),
-                      "plan_state": i["state"], "steps": (s.results.get(i["source"]) or {}).get("steps", {})} for i in items],
+                      "plan_state": i["state"], "steps": (s.results.get(i["source"]) or {}).get("steps", {}),
+                      "changes": change_summary(s.results.get(i["source"]))} for i in items],
         "skipped": [{"source": i["source"], "target": i["target"], "reason": i["reason"]} for i in skipped],
         "groups": groups, "group_steps": s.group_results and [
             {"source": g["source"], "target": g["target"], "steps": g["steps"]} for g in s.group_results],
@@ -58,7 +60,7 @@ def build(s, plan, components, items, projects, groups, started, mode="teleport"
 # ── terminal ──
 def print_summary(rep, run_dir):
     tot = rep["totals"]
-    title = t("Teleport result", "ผลการย้าย") if rep["mode"] == "teleport" else t("Verification result", "ผลการตรวจสอบ")
+    title = {"teleport": t("Teleport result", "ผลการย้าย"), "sync": t("Sync result", "ผลการ sync")}.get(rep["mode"], t("Verification result", "ผลการตรวจสอบ"))
     term.heading(title, f"{rep['kind']} · {rep['source']} → {rep['target']} · {term.elapsed(rep['seconds'])}")
     rows = []
 
@@ -96,6 +98,9 @@ def print_summary(rep, run_dir):
         parts.append(term.style(f"✗ {c['fail']} " + t("failed", "ไม่สำเร็จ"), "red"))
     if rep["skipped"]:
         parts.append(term.style(f"– {len(rep['skipped'])} " + skipped_word(rep), "dim"))
+    if rep["mode"] == "sync":
+        changed = sum(1 for p in rep["projects"] if p.get("changes"))
+        parts.insert(0, term.style(f"↑ {changed} " + t("updated", "อัปเดต"), "cyan"))
     term.out("")
     term.out("  " + "   ".join(parts))
     attention = [p for p in rep["projects"] if p["status"] != "ok"] + [g for g in rep["groups"] if g["status"] != "ok"]
@@ -151,7 +156,7 @@ def markdown(rep):
     tot = rep["totals"]
     c = rep["counts"]
     L = []
-    title = t("Teleport report", "รายงานการย้าย") if rep["mode"] == "teleport" else t("Verification report", "รายงานการตรวจสอบ")
+    title = {"teleport": t("Teleport report", "รายงานการย้าย"), "sync": t("Sync report", "รายงานการ sync")}.get(rep["mode"], t("Verification report", "รายงานการตรวจสอบ"))
     L += [f"# {title}: `{rep['source']}` → `{rep['target']}`", ""]
     result = f"✅ {c['ok']} " + t("verified", "ตรงกันครบ")
     if c["warn"]:
@@ -167,7 +172,7 @@ def markdown(rep):
           f"| {t('Started', 'เริ่ม')} | {rep['started'].replace('T', ' ')} · {term.elapsed(rep['seconds'])} |",
           f"| {t('Source', 'ต้นทาง')} | {rep['source_url']}/{rep['source']} ({rep['source_user']}) |",
           f"| {t('Target', 'ปลายทาง')} | {rep['target_url']}/{rep['target']} ({rep['target_user']}) |",
-          f"| {t('Transferred', 'สิ่งที่ย้าย') if rep['mode'] == 'teleport' else t('Checked', 'สิ่งที่ตรวจ')} | {', '.join(rep['components'])} |"]
+          f"| {t('Transferred', 'สิ่งที่ย้าย') if rep['mode'] != 'verify' else t('Checked', 'สิ่งที่ตรวจ')} | {', '.join(rep['components'])} |"]
     if rep.get("layout"):
         L.append(f"| {t('Layout', 'โครงสร้าง')} | {rep['layout']} |")
     shown = [k for k in rep["options"] if k not in ("cache_dir", "yes", "dry_run")]
@@ -227,7 +232,8 @@ def markdown(rep):
         tg = f"{r.get('target_tags', '')}/{r.get('source_tags', '')}" if r else ""
         vs = p.get("variables")
         vv = f"{sum(1 for x in vs if x['status'] in ('ok', 'warn', 'manual'))}/{sum(1 for x in vs if x['status'] != 'info')}" if vs is not None else ""
-        note = "; ".join(i["text"] for i in p["issues"] if i["level"] in ("fail", "warn"))[:120]
+        note = "; ".join([", ".join(p.get("changes") or [])] * (rep["mode"] == "sync" and bool(p.get("changes")))
+                         + [i["text"] for i in p["issues"] if i["level"] in ("fail", "warn")])[:160]
         L.append(f"| {MD_ICON[p['status']]} | `{p['source']}` | `{p['target']}` | {br} | {tg} | {vv} | {note} |")
     for sk in rep["skipped"]:
         L.append(f"| {'⏭️' if rep['mode'] == 'teleport' else '⬜'} | `{sk['source']}` | `{sk['target']}` | | | | {sk['reason']} |")

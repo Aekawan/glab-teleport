@@ -6,13 +6,13 @@ import time
 from . import __version__, config, report, term
 from .gitlab import connect
 from .i18n import t
-from .plan import COMPONENTS, MOVE, NEW, SKIP, SYNCED, UPDATE, plan_group, plan_projects, print_plan
+from .plan import COMPONENTS, MOVE, NEW, SKIP, SYNCED, UPDATE, plan_group, plan_projects, print_plan, print_sync_plan
 from .transfer import Session, execute
 from .urls import build_rewriter
 from .verify import inherited_vars, verify_all
 
 OPT_KEYS = ("jobs", "relocate", "with_parent_vars", "rewrite_urls", "overwrite", "force_push", "activate_schedules",
-            "allow_unmask", "cache_dir", "yes", "dry_run")
+            "allow_unmask", "cache_dir", "yes", "dry_run", "prune", "sync")
 
 
 def session(args):
@@ -46,13 +46,14 @@ def equivalent(kind, srcs, dst, components, args):
 
 def teleport(args, kind, srcs, dst, components, s=None, interactive=False):
     s = s or session(args)
+    sync = s.opt("sync")
     header(s)
     with term.Status(t("Planning…", "กำลังวางแผน…")) as st:
         plan = build_plan(s, args, kind, srcs, dst, st)
         st.update(t("Reading inherited variables…", "กำลังอ่านตัวแปรที่สืบทอดจาก group…"))
         s.extra_vars, s.parent_vars = inherited_vars(s, plan, components)
-    print_plan(plan, components, s.opts)
-    if interactive:
+    (print_sync_plan if sync else print_plan)(plan, components, s.opts)
+    if interactive and not sync:
         term.out("")
         term.kv([(t("Command", "คำสั่ง"), term.style(equivalent(kind, srcs, dst, components, args), "dim"))])
     items = [i for i in plan["items"] if i["state"] != SKIP or (i.get("conflict") and s.opt("force_push"))]
@@ -71,23 +72,26 @@ def teleport(args, kind, srcs, dst, components, s=None, interactive=False):
         return 0
     if not items:
         term.out("")
-        term.out(t("Nothing to teleport.", "ไม่มีรายการที่ต้องย้าย"))
+        term.out(t("Nothing to do.", "ไม่มีรายการที่ต้องทำ"))
         return 0
     if not s.opt("yes"):
         if not sys.stdin.isatty():
             raise SystemExit(t("Confirmation required: run in a terminal or pass --yes.", "ต้องยืนยันก่อนเริ่ม: รันใน terminal หรือใส่ --yes"))
         term.out("")
-        if not term.confirm(t("Teleport {n} projects now?", "เริ่มย้าย {n} project หรือไม่", n=len(items))):
+        question = t("Sync {n} projects now?", "เริ่ม sync {n} project หรือไม่", n=len(items)) if sync else \
+            t("Teleport {n} projects now?", "เริ่มย้าย {n} project หรือไม่", n=len(items))
+        if not term.confirm(question):
             term.out(t("Cancelled. Nothing was changed.", "ยกเลิกแล้ว ไม่มีการเปลี่ยนแปลงใดๆ"))
             return 1
-    s.run_dir = report.new_run_dir(s.work, f"{kind}-{plan['source']}")
+    s.run_dir = report.new_run_dir(s.work, f"{'sync-' if sync else ''}{kind}-{plan['source']}")
     s.rewriter = build_rewriter(s, plan["items"])
     started = time.time()
-    term.heading(t("Teleporting", "กำลังย้าย"), t("{n} projects · {j} at a time", "{n} project · ทำพร้อมกัน {j}", n=len(items), j=s.jobs))
+    term.heading(t("Syncing", "กำลัง sync") if sync else t("Teleporting", "กำลังย้าย"),
+                 t("{n} projects · {j} at a time", "{n} project · ทำพร้อมกัน {j}", n=len(items), j=s.jobs))
     executed = execute(s, plan, components)
     with term.Status(t("Verifying…", "กำลังตรวจสอบ…")) as st:
         projects, groups = verify_all(s, executed, components, st)
-    rep = report.build(s, plan, components, executed, projects, groups, started)
+    rep = report.build(s, plan, components, executed, projects, groups, started, mode="sync" if sync else "teleport")
     report.write(rep, s.run_dir)
     report.print_summary(rep, s.run_dir)
     return 1 if rep["counts"]["fail"] else 0
@@ -140,3 +144,47 @@ def show_report(args):
         raise SystemExit(t("Run '{r}' not found.", "ไม่พบรอบ '{r}'", r=args.run))
     report.print_summary(json.loads((d / "report.json").read_text()), d)
     return 0
+
+
+def sync(args, source=None, target=None):
+    """Bring a previous teleport up to date with the source (project or group). The source always wins."""
+    from . import history
+    from .gitlab import connect as _connect
+    from .plan import clean_path, parse_only
+    work = config.WORK_DIR
+    if not source:
+        choices = history.sync_targets(work)
+        if not choices:
+            raise SystemExit(t("Nothing has been teleported yet. Start with: glab-teleport group <source> <target>",
+                               "ยังไม่มีรายการที่เคยย้าย เริ่มด้วย: glab-teleport group <ต้นทาง> <ปลายทาง>"))
+        if not sys.stdin.isatty():
+            raise SystemExit(t("Choose what to sync: glab-teleport sync <source>\n", "เลือกสิ่งที่จะ sync: glab-teleport sync <ต้นทาง>\n")
+                             + "\n".join(f"  {c['source']}  →  {c['target']}" for c in choices))
+        pick = term.ask(t("What do you want to sync?", "ต้องการ sync อะไร"),
+                        [term.item(i, c["source"], f"→ {c['target']} · {(c['started'] or '')[:16].replace('T', ' ')}",
+                                   tag=c["kind"]) for i, c in enumerate(choices)])
+        if pick is None:
+            return 0
+        source, target = choices[pick]["source"], choices[pick]["target"]
+    source = clean_path(source)
+    src_gl = _connect("source", config.side_url("source", getattr(args, "source_url", None)), args.insecure)
+    kind = "group" if src_gl.group(source) else "project" if src_gl.project(source) else None
+    if not kind:
+        raise SystemExit(t("'{p}' was not found on the source GitLab", "ไม่พบ '{p}' ใน GitLab ต้นทาง", p=source))
+    target = clean_path(target) if target else history.infer_target(work, kind, source)
+    if not target:
+        raise SystemExit(t("'{p}' hasn't been teleported yet, so there is nothing to sync. Teleport it first, or give the target: "
+                           "glab-teleport sync {p} <target>",
+                           "'{p}' ยังไม่เคยถูกย้าย จึงยังไม่มีอะไรให้ sync กรุณาย้ายก่อน หรือระบุปลายทาง: glab-teleport sync {p} <ปลายทาง>", p=source))
+    prev = history.previous(work, kind, source) or {}
+    opts = prev.get("options") or {}
+    if not args.layout:
+        args.layout = prev.get("layout") or "keep"
+    for flag in ("rewrite_urls", "with_parent_vars", "allow_unmask"):
+        if opts.get(flag) and not getattr(args, flag, False):
+            setattr(args, flag, True)       # same choices as the original teleport
+    components = parse_only(args.only) if args.only else [c for c in COMPONENTS if c in (prev.get("components") or COMPONENTS)]
+    args.sync, args.overwrite = True, not args.no_overwrite
+    args.relocate = False
+    args.include = args.exclude = None
+    return teleport(args, kind, [source], target, components)

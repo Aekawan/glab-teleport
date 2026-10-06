@@ -13,3 +13,5 @@ All notable changes to this project are documented here. The format follows [Kee
 - Interactive mode with a fuzzy picker; English and Thai interface.
 - `login` (token page, OAuth with PKCE, or paste), `logout`, `doctor`, `config`.
 - `audit`, `refs` and `repoint` for instance-wide migrations.
+- `sync` to bring an earlier teleport up to date (project or group); remembers the target and options; `--prune`, `--no-overwrite`.
+- Git pushes use `ci.skip` so copying history never starts pipelines on the target.

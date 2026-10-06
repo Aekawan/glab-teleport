@@ -8,7 +8,7 @@ from .gitlab import connect
 from .i18n import resolve_lang, set_lang, t
 from .plan import COMPONENTS, clean_path, parse_only
 
-COMMANDS = ("group", "project", "verify", "report", "audit", "refs", "repoint", "login", "logout", "doctor", "config")
+COMMANDS = ("group", "project", "sync", "verify", "report", "audit", "refs", "repoint", "login", "logout", "doctor", "config")
 
 
 def _common(p):
@@ -52,6 +52,7 @@ def parser():
   glab-teleport                                   interactive mode
   glab-teleport group my-group new-org/my-group   teleport a group
   glab-teleport project my-group/api new-org/team --only repo,env
+  glab-teleport sync my-group                     bring the target up to date again
   glab-teleport verify my-group new-org/my-group  read-only check
   glab-teleport doctor                            check your setup
 
@@ -60,6 +61,7 @@ docs: https://github.com/Aekawan/glab-teleport""",
   glab-teleport                                   โหมดเลือกจากรายการ
   glab-teleport group my-group new-org/my-group   ย้ายทั้ง group
   glab-teleport project my-group/api new-org/team --only repo,env
+  glab-teleport sync my-group                     อัปเดตปลายทางให้ตามต้นทางล่าสุด
   glab-teleport verify my-group new-org/my-group  ตรวจสอบโดยไม่เปลี่ยนแปลงอะไร
   glab-teleport doctor                            ตรวจสอบความพร้อมของเครื่อง
 
@@ -77,6 +79,24 @@ docs: https://github.com/Aekawan/glab-teleport""",
     p.add_argument("source", nargs="+", help=t("source project path(s) or URL(s)", "path หรือ URL ของ project ต้นทาง"))
     p.add_argument("target", help=t("target group (keeps the name) or full project path", "group ปลายทาง (ใช้ชื่อเดิม) หรือ path ของ project ปลายทาง"))
     _transfer_opts(p)
+    _common(p)
+
+    p = sub.add_parser("sync", help=t("update an earlier teleport with the latest from the source", "อัปเดตปลายทางให้ตามต้นทางล่าสุด (หลังจากเคยย้ายแล้ว)"))
+    p.add_argument("source", nargs="?", help=t("source group or project (omit to pick from earlier teleports)", "group หรือ project ต้นทาง (ไม่ใส่ = เลือกจากรายการที่เคยย้าย)"))
+    p.add_argument("target", nargs="?", help=t("target (default: where it was teleported before)", "ปลายทาง (ค่าเริ่มต้น: ที่เคยย้ายไว้)"))
+    p.add_argument("--only", metavar="LIST", help=t("what to sync (default: same as the original teleport)", "สิ่งที่จะ sync (ค่าเริ่มต้น: เหมือนตอนย้ายครั้งแรก)"))
+    p.add_argument("--prune", action="store_true", help=t("also delete branches, tags and variables that no longer exist on the source",
+                                                           "ลบ branch, tag และตัวแปรที่ต้นทางไม่มีแล้วด้วย"))
+    p.add_argument("--no-overwrite", action="store_true", help=t("only add what is missing; keep target values that differ",
+                                                                  "เพิ่มเฉพาะที่ยังไม่มี ไม่แก้ค่าที่ปลายทางต่างจากต้นทาง"))
+    p.add_argument("--dry-run", action="store_true", help=t("show what would change and stop", "แสดงสิ่งที่จะเปลี่ยนแล้วหยุด"))
+    p.add_argument("-y", "--yes", action="store_true", help=t("don't ask for confirmation", "ไม่ต้องถามยืนยัน"))
+    p.add_argument("--layout", choices=["keep", "flat", "join", "auto"], help=argparse.SUPPRESS)
+    a = p.add_argument_group(t("advanced", "ขั้นสูง"))
+    a.add_argument("--force-push", action="store_true", help=t("overwrite target branches that diverged (destructive)", "เขียนทับ branch ปลายทางที่ไม่ตรงกัน (ย้อนกลับไม่ได้)"))
+    a.add_argument("--rewrite-urls", action="store_true", help=t("rewrite source repository URLs inside variables", "แปลง URL ของ repository ต้นทางในค่าตัวแปร"))
+    a.add_argument("--with-parent-vars", action="store_true", help=t("also copy variables inherited from parent groups", "คัดลอกตัวแปรที่สืบทอดจาก group แม่ด้วย"))
+    a.add_argument("--jobs", type=int, default=6, metavar="N", help=t("projects in parallel (default 6)", "จำนวน project ที่ทำพร้อมกัน (ค่าเริ่มต้น 6)"))
     _common(p)
 
     p = sub.add_parser("verify", help=t("compare source and target without changing anything", "เทียบต้นทางกับปลายทางโดยไม่เปลี่ยนแปลงอะไร"))
@@ -166,6 +186,11 @@ def dispatch(args):
     if cmd in ("group", "project"):
         srcs = [clean_path(x) for x in (args.source if isinstance(args.source, list) else [args.source])]
         return run.teleport(args, cmd, srcs, clean_path(args.target), parse_only(args.only))
+    if cmd == "sync":
+        for k, v in dict(activate_schedules=False, allow_unmask=False, cache_dir=None, relocate=False).items():
+            if not hasattr(args, k):
+                setattr(args, k, v)
+        return run.sync(args, args.source, args.target)
     if cmd == "verify":
         s = clean_path(args.source)
         gl = connect("source", config.side_url("source", args.source_url), args.insecure)

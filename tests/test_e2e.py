@@ -148,6 +148,13 @@ class Server:
             def do_PUT(self):
                 path, qs = self.parse()
                 d = self.body()
+                m = re.match(r"^/(projects|groups)/(\d+)/variables/(.+)$", path)
+                if m:
+                    for v in srv.coll((m[1], int(m[2]), "variables")):
+                        if v["key"] == m[3] and v["environment_scope"] == qs.get("filter[environment_scope]", "*"):
+                            v.update(d)
+                            return self.send(200, v)
+                    return self.send(404)
                 m = re.match(r"^/projects/(\d+)$", path)
                 if m:
                     srv.projects[int(m[1])].update(d)
@@ -155,6 +162,11 @@ class Server:
                 self.send(404)
 
             def do_DELETE(self):
+                path, qs = self.parse()
+                m = re.match(r"^/(projects|groups)/(\d+)/variables/(.+)$", path)
+                if m:
+                    items = srv.coll((m[1], int(m[2]), "variables"))
+                    items[:] = [v for v in items if not (v["key"] == m[3] and v["environment_scope"] == qs.get("filter[environment_scope]", "*"))]
                 self.send(204)
         return H
 
@@ -231,6 +243,59 @@ class TeleportEndToEnd(unittest.TestCase):
             run.teleport(args, "project", ["team/api"], "org", ["repo", "env", "settings"])
         self.assertIn("in sync", out.getvalue())
 
+
+    def sync_args(self, **kw):
+        return argparse.Namespace(**{**dict(source_url=self.src.url, target_url=self.dst.url, insecure=False, only=None, prune=False,
+                                            no_overwrite=False, dry_run=False, yes=True, layout=None, force_push=False, rewrite_urls=False,
+                                            with_parent_vars=False, jobs=2, activate_schedules=False, allow_unmask=False, cache_dir=None,
+                                            relocate=False), **kw})
+
+    def test_sync_brings_target_up_to_date(self):
+        args = self.sync_args(**dict(include=None, exclude=None, overwrite=False, rewrite_urls=True))
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(run.teleport(args, "project", ["team/api"], "org", ["repo", "env"]), 0)
+        dst = next(p for p in self.dst.projects.values() if p["path_with_namespace"] == "org/api")
+        src = self.src.projects[min(self.src.projects)]
+        work = self.tmp / "work"
+        g = lambda *a: subprocess.run(["git", "-c", "user.email=t@example.com", "-c", "user.name=t", *a], cwd=work, check=True, capture_output=True)
+        g("checkout", "-q", "develop")
+        g("commit", "-q", "--allow-empty", "-m", "more work")
+        g("checkout", "-qb", "feature/new")
+        g("commit", "-q", "--allow-empty", "-m", "feature")
+        g("push", "-q", src["http_url_to_repo"], "develop", "feature/new")
+        g("push", "-q", src["http_url_to_repo"], "--delete", "refs/tags/v1.0.0")
+        svars = self.src.coll(("projects", src["id"], "variables"))
+        next(v for v in svars if v["environment_scope"] == "staging")["value"] = "postgres://staging-v2"
+        svars.append({"key": "NEW_FLAG", "value": "1", "environment_scope": "production", "variable_type": "env_var",
+                      "protected": False, "masked": False, "raw": False})
+        svars[:] = [v for v in svars if v["key"] != "REPO"]
+
+        out = io.StringIO()
+        with redirect_stdout(out):                                    # target inferred from history
+            code = run.sync(self.sync_args(), "team/api")
+        self.assertEqual(code, 0, out.getvalue())
+        refs = lambda url: dict(l.split("\t")[::-1] for l in subprocess.run(["git", "ls-remote", url], capture_output=True,
+                                                                              text=True).stdout.splitlines() if "\trefs/" in l)
+        s_refs, d_refs = refs(src["http_url_to_repo"]), refs(dst["http_url_to_repo"])
+        self.assertEqual(d_refs["refs/heads/develop"], s_refs["refs/heads/develop"])
+        self.assertIn("refs/heads/feature/new", d_refs)
+        self.assertIn("refs/tags/v1.0.0", d_refs)                        # not pruned without --prune
+        dvars = {(v["key"], v["environment_scope"]): v for v in self.dst.coll(("projects", dst["id"], "variables"))}
+        self.assertEqual(dvars[("DB_URL", "staging")]["value"], "postgres://staging-v2")   # source wins
+        self.assertIn(("NEW_FLAG", "production"), dvars)
+        self.assertIn(("REPO", "*"), dvars)
+        self.assertIn("variables", out.getvalue())
+
+        with redirect_stdout(io.StringIO()):
+            run.sync(self.sync_args(prune=True), "team/api")
+        d_refs = refs(dst["http_url_to_repo"])
+        self.assertNotIn("refs/tags/v1.0.0", d_refs)
+        self.assertNotIn(("REPO", "*"), {(v["key"], v["environment_scope"]) for v in self.dst.coll(("projects", dst["id"], "variables"))})
+
+        out = io.StringIO()
+        with redirect_stdout(out):
+            run.sync(self.sync_args(), "team/api")
+        self.assertIn("up to date", out.getvalue())
 
     def test_flat_group_with_duplicate_names(self):
         """Two subgroups each holding a project called `config` must both arrive when subgroups are dropped."""

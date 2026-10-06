@@ -167,16 +167,23 @@ def step_repo(s, it, src, dst, rec, act):
         else Path(tmp := tempfile.mkdtemp(prefix="glab-teleport-")) / "repo.git"
     try:
         r = sync_repo(s.src, s.dst, src["http_url_to_repo"], dst["http_url_to_repo"], repo_dir,
-                      force=s.opt("force_push"), activity=lambda x: act("repo: " + x))
+                      force=s.opt("force_push"), activity=lambda x: act("repo: " + x), prune=s.opt("prune"))
     finally:
         if tmp:
             shutil.rmtree(tmp, ignore_errors=True)
     bad = sorted(set(r["rejected"]) | set(r["mismatched"]))
+    good = [x for x in r["updated"] if x not in bad]
     detail = t("{b} branches, {t} tags", "{b} branch, {t} tag", b=r["branches"], t=r["tags"]) + (" + LFS" if r["lfs"] else "")
+    if good:
+        detail += t("; updated: {r}", "; อัปเดต: {r}", r=", ".join(short_ref(x) for x in good[:6]) + ("…" if len(good) > 6 else ""))
+    if r["deleted"]:
+        detail += t("; removed: {r}", "; ลบ: {r}", r=", ".join(short_ref(x) for x in r["deleted"][:6]))
+    changes = {"refs": len(good), "refs_removed": len(r["deleted"])}
     if bad:
         return rec("fail", detail + " — " + t("not updated: {r}", "อัปเดตไม่ได้: {r}", r=", ".join(short_ref(x) for x in bad[:6]))
-                   + ("" if s.opt("force_push") else t(" (target has newer or different commits)", " (ปลายทางมี commit ใหม่กว่าหรือต่างกัน)")))
-    rec("ok", detail)
+                   + ("" if s.opt("force_push") else t(" (target has newer or different commits)", " (ปลายทางมี commit ใหม่กว่าหรือต่างกัน)")),
+                   changes=changes)
+    rec("ok", detail, changes=changes)
 
 
 def step_wiki(s, it, src, dst, rec, act):
@@ -199,7 +206,7 @@ def step_default_branch(s, it, src, dst, rec, act):
     for attempt in range(8):  # a just-pushed branch can take a few seconds to be visible to the API
         cur = s.dst.get(f"/projects/{dst['id']}").get("default_branch")
         if cur == want:
-            return rec("ok", want)
+            return rec("ok", want, changes={"default_branch": int(attempt > 0)})
         try:
             s.dst.put(f"/projects/{dst['id']}", {"default_branch": want})
         except ApiError:
@@ -252,7 +259,7 @@ def step_protection(s, it, src, dst, rec, act, created=False):
             s.dst.post(f"/projects/{dst['id']}/protected_{kind}", payload)
             made += 1
     rec("warn" if notes else "ok", t("{m} rules applied, {s} already correct", "ตั้งกฎ {m} ข้อ, ตรงอยู่แล้ว {s} ข้อ", m=made, s=same)
-        + ("; " + "; ".join(notes[:4]) if notes else ""))
+        + ("; " + "; ".join(notes[:4]) if notes else ""), changes={"protection": made})
 
 
 def load_vars(gl, base):
@@ -265,8 +272,15 @@ def copy_variables(s, src_vars, dst_base):
     dst = load_vars(s.dst, dst_base)
     if dst is None:
         return None
-    st = {"total": len(src_vars), "created": 0, "same": 0, "updated": 0, "differs": [], "failed": [], "hidden": [],
+    st = {"total": len(src_vars), "created": 0, "same": 0, "updated": 0, "deleted": 0, "differs": [], "failed": [], "hidden": [],
           "unmasked": [], "rewritten": []}
+    if s.opt("prune"):  # variables removed on the source are removed on the target too
+        for k in sorted(set(dst) - set(src_vars)):
+            try:
+                s.dst.delete(f"{dst_base}/variables/{q(k[0])}", **{"filter[environment_scope]": k[1]})
+                st["deleted"] += 1
+            except ApiError as e:
+                st["failed"].append(f"{vlabel(k)} ({e.code})")
     for k, v in sorted(src_vars.items()):
         if v.get("hidden") or v.get("value") is None:
             st["hidden"].append(vlabel(k))
@@ -309,7 +323,9 @@ def var_summary(st):
         return "fail", t("cannot read target variables (permission)", "อ่าน variables ปลายทางไม่ได้ (สิทธิ์ไม่พอ)")
     parts = [t("{n} variables: {c} created, {s} unchanged", "{n} ตัวแปร: สร้าง {c}, ตรงอยู่แล้ว {s}", n=st["total"], c=st["created"], s=st["same"])]
     if st["updated"]:
-        parts.append(t("{n} overwritten", "เขียนทับ {n}", n=st["updated"]))
+        parts.append(t("{n} updated", "อัปเดต {n}", n=st["updated"]))
+    if st["deleted"]:
+        parts.append(t("{n} removed", "ลบ {n}", n=st["deleted"]))
     if st["rewritten"]:
         parts.append(t("{n} URLs rewritten", "แปลง URL {n}", n=len(st["rewritten"])))
     if st["differs"]:
@@ -334,7 +350,7 @@ def step_variables(s, it, src, dst, rec, act):
     status, detail = var_summary(st)
     if inherited:
         detail += t("; includes {n} inherited from flattened groups", "; รวมตัวแปรที่สืบทอดจาก group {n} ตัว", n=len(inherited))
-    rec(status, detail)
+    rec(status, detail, changes={"variables": (st["created"] + st["updated"] + st["deleted"]) if st else 0})
 
 
 def step_environments(s, it, src, dst, rec, act):
@@ -347,7 +363,7 @@ def step_environments(s, it, src, dst, rec, act):
         if e["name"] not in have:
             s.dst.post(f"/projects/{dst['id']}/environments", {k: e[k] for k in ("name", "external_url") if e.get(k)})
             made += 1
-    rec("ok", t("{n} environments ({m} created)", "{n} environment (สร้าง {m})", n=len(se), m=made))
+    rec("ok", t("{n} environments ({m} created)", "{n} environment (สร้าง {m})", n=len(se), m=made), changes={"environments": made})
 
 
 def step_settings(s, it, src, dst, rec, act):
@@ -564,6 +580,8 @@ def run_project(s, it, components):
         s.act(sp, t("preparing", "กำลังเตรียม"))
         dst, created = ensure_project(s, it)
         it["dst"], it["created"] = dst, created
+        if created:
+            rec_raw("create", "ok", dst["path_with_namespace"], changes={"created": 1})
         it["fresh"] = created or bool(dst.get("empty_repo"))
     except ApiError as e:
         rec_raw("lookup", "fail", f"HTTP {e.code} {e.body[:120]}")
@@ -598,6 +616,30 @@ def run_project(s, it, components):
         s.results[sp]["seconds"] = round(time.time() - started, 1)
         s.active.pop(sp, None)
     return sp
+
+
+def change_summary(result):
+    """Short human list of what actually changed on the target for one project."""
+    c = Counter()
+    for v in (result or {}).get("steps", {}).values():
+        for k, n in (v.get("changes") or {}).items():
+            c[k] += n
+    parts = []
+    if c["created"]:
+        parts.append(t("new project", "project ใหม่"))
+    if c["refs"]:
+        parts.append(t("{n} branches/tags updated", "อัปเดต {n} branch/tag", n=c["refs"]))
+    if c["refs_removed"]:
+        parts.append(t("{n} branches/tags removed", "ลบ {n} branch/tag", n=c["refs_removed"]))
+    if c["variables"]:
+        parts.append(t("{n} variables", "ตัวแปร {n} ตัว", n=c["variables"]))
+    if c["protection"]:
+        parts.append(t("{n} protection rules", "กฎ protected {n} ข้อ", n=c["protection"]))
+    if c["environments"]:
+        parts.append(t("{n} environments", "environment {n} รายการ", n=c["environments"]))
+    if c["default_branch"]:
+        parts.append(t("default branch", "default branch"))
+    return parts
 
 
 def component_status(result, comp):
@@ -730,6 +772,8 @@ def execute(s, plan, components):
                 stop.wait(0.2)
         stop = threading.Event()
         threading.Thread(target=tick, daemon=True).start()
+        quiet = s.opt("sync")
+        unchanged = 0
         try:
             with ThreadPoolExecutor(max_workers=s.jobs) as ex:
                 futs = {ex.submit(run_project, s, it, components): it for it in items}
@@ -739,8 +783,18 @@ def execute(s, plan, components):
                     done += 1
                     r = s.results.get(it["source"], {"steps": {}})
                     sym, color = MARK[overall(r)]
+                    if quiet:  # sync: only show what changed or needs attention
+                        what = change_summary(r)
+                        if not what and overall(r) == "ok":
+                            unchanged += 1
+                            continue
+                        term.out(f"  {term.style('↑' if what and overall(r) == 'ok' else sym, 'cyan' if what and overall(r) == 'ok' else color)} "
+                                 f"{term.pad(term.fit(it['source'], 44), 44)}  {term.style(', '.join(what), 'dim') if what else badges(r, components)}")
+                        continue
                     term.out(f"  {term.style(sym, color)} {term.pad(term.fit(it['source'], 44), 44)}  {badges(r, components)}"
                              f"  {term.style(term.elapsed(r.get('seconds', 0)), 'dim')}")
         finally:
             stop.set()
+        if quiet and unchanged:
+            term.out(term.style("  ✓ " + t("{n} projects already up to date", "{n} project เป็นปัจจุบันแล้ว", n=unchanged), "green"))
     return items

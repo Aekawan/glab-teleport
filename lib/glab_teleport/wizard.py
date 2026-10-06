@@ -105,9 +105,16 @@ def run(args):
         if step == "kind":
             kind = term.ask(t("What do you want to teleport?", "ต้องการย้ายอะไร"), [
                 term.item("group", t("A group", "ทั้ง group"), t("every project and subgroup inside it", "ทุก project และ subgroup ภายใน")),
-                term.item("project", t("Projects", "เลือก project"), t("pick one or more (Tab)", "เลือกได้หลายรายการ (Tab)"))], subtitle=sub)
+                term.item("project", t("Projects", "เลือก project"), t("pick one or more (Tab)", "เลือกได้หลายรายการ (Tab)")),
+                term.item("sync", t("Sync", "Sync"), t("update an earlier teleport with the latest from the source",
+                                                       "อัปเดตสิ่งที่เคยย้ายแล้วให้ตามต้นทางล่าสุด"))], subtitle=sub)
             if kind is None:
                 return 0
+            if kind == "sync":
+                from .run import sync
+                for k, v in dict(only=None, prune=False, no_overwrite=False, layout=None).items():
+                    setattr(args, k, v)
+                return sync(args)
             step = "src"
         elif step == "src":
             if kind == "group":

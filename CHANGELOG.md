@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-10-06
+
+### Added
+- `sync [source] [target]`: bring an earlier teleport up to date, for a project or a whole group. The source wins; the target,
+  layout, components and options are remembered from earlier runs. `--prune` removes branches, tags and variables deleted on
+  the source; `--no-overwrite` only adds what is missing; `--dry-run` shows what would change.
+- Repositories whose branches and tags already match are skipped without downloading anything.
+- Sync entry in interactive mode; sync runs list only the projects that changed.
+
 ## [0.1.0] — 2026-10-06
 
 ### Added
@@ -13,5 +22,3 @@ All notable changes to this project are documented here. The format follows [Kee
 - Interactive mode with a fuzzy picker; English and Thai interface.
 - `login` (token page, OAuth with PKCE, or paste), `logout`, `doctor`, `config`.
 - `audit`, `refs` and `repoint` for instance-wide migrations.
-- `sync` to bring an earlier teleport up to date (project or group); remembers the target and options; `--prune`, `--no-overwrite`.
-- Git pushes use `ci.skip` so copying history never starts pipelines on the target.

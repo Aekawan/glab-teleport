@@ -68,6 +68,23 @@ def fetch_refs(gl, projects, jobs=8):
         return {k: v for k, v in ex.map(one, projects) if v.get("refs") or v.get("error")}
 
 
+def classify(session, items, fp_src, fp_dst):
+    """For refs that differ, tell 'target is just behind' (safe to update) from 'target has its own commits' (never overwritten)."""
+    def one(it):
+        cmp = it.get("sync")
+        if not cmp or not cmp["different"] or not it.get("src"):
+            return
+        dst_refs = (fp_dst.get(it.get("move_from") or it["target"]) or {}).get("refs") or {}
+        behind, diverged = [], []
+        for r in cmp["different"][:20]:
+            sha = dst_refs.get(r)
+            known = sha and session.src.try_get(f"/projects/{it['src']['id']}/repository/commits/{sha}")
+            (behind if known else diverged).append(r)
+        cmp["behind"], cmp["diverged"] = behind, diverged
+    with ThreadPoolExecutor(max_workers=max(1, session.jobs)) as ex:
+        list(ex.map(one, items))
+
+
 def _entry(sp, tp, state, reason="", src=None, dst=None):
     return {"source": sp, "target": tp, "state": state, "reason": reason, "src": src, "dst": dst,
             "sync": None, "move_from": None, "archived": bool(src and src.get("archived"))}
@@ -193,6 +210,7 @@ def plan_group(session, src_path, dst_path, layout="keep", include=None, exclude
             elif it["state"] == UPDATE and it["sync"]["state"] == "identical":
                 it["state"] = SYNCED
 
+    classify(session, items, fp_src, fp_dst)
     pairs = [(sg, dst_root)]
     relevant = [g for g in ssubs if any(under(i["source"], g["full_path"]) for i in items)]
     if layout == "keep":
@@ -241,6 +259,7 @@ def plan_projects(session, src_paths, dst_path, status=None):
             else:
                 it["sync"] = compare_refs(sa, sb)
                 it["state"] = SYNCED if it["sync"]["state"] == "identical" else UPDATE
+                classify(session, [it], {p["path_with_namespace"]: a or {}}, {target["path_with_namespace"]: b or {}})
         items.append(it)
     seen = Counter(i["target"].lower() for i in items)
     for i in items:

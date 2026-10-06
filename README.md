@@ -155,19 +155,22 @@ Shortcut: `glab-teleport payments platform/payments` works out whether the sourc
 
 ## Keep the target up to date (sync)
 
-Still working on the old GitLab? Teleport once, keep working as usual, and run `sync` whenever you want the new GitLab to catch up.
+Still working on the old GitLab? Keep working as usual and run `sync` whenever you want the new GitLab to catch up — for anything
+you teleported before, or for any other group or project (for example one that someone else migrated by hand).
 
 ```bash
-glab-teleport sync                          # pick from what you teleported before
-glab-teleport sync payments                 # a whole group — the target is remembered
+glab-teleport sync                          # pick from earlier teleports, or choose any group/project
+glab-teleport sync payments                 # a whole group — the target is remembered or suggested
 glab-teleport sync payments/api             # a single project
+glab-teleport sync billing platform/billing # a group that was never teleported: give the target once
 glab-teleport sync payments --dry-run       # see what would change
 glab-teleport sync payments --prune         # also remove what was deleted on the source
 ```
 
 - **The source wins.** New commits, branches, tags, projects and subgroups are added, and changed variables, protection rules, environments and settings are updated.
 - **Fast.** Projects whose code already matches are not downloaded. Only projects that changed are listed.
-- **Remembers your choices.** The target, the layout and options such as `--rewrite-urls` come from the original teleport.
+- **Remembers your choices.** The target, the layout and options such as `--rewrite-urls` come from earlier runs. For anything new, the target is suggested and you confirm it.
+- **Tells you what's safe.** Each project shows whether the target is just behind (updated) or has its own commits (kept, never overwritten).
 - **Never destructive by default.** Things deleted on the source are only removed on the target with `--prune`. Branches that someone changed on the target are reported, never overwritten (unless `--force-push`). Use `--no-overwrite` to only add what is missing.
 - **No pipelines.** Pushes use `ci.skip`, so syncing never starts builds or deployments on the target.
 

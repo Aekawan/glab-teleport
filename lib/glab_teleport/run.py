@@ -152,30 +152,32 @@ def sync(args, source=None, target=None):
     from .gitlab import connect as _connect
     from .plan import clean_path, parse_only
     work = config.WORK_DIR
+    s = session(args)
     if not source:
-        choices = history.sync_targets(work)
-        if not choices:
-            raise SystemExit(t("Nothing has been teleported yet. Start with: glab-teleport group <source> <target>",
-                               "ยังไม่มีรายการที่เคยย้าย เริ่มด้วย: glab-teleport group <ต้นทาง> <ปลายทาง>"))
         if not sys.stdin.isatty():
-            raise SystemExit(t("Choose what to sync: glab-teleport sync <source>\n", "เลือกสิ่งที่จะ sync: glab-teleport sync <ต้นทาง>\n")
+            choices = history.sync_targets(work)
+            raise SystemExit(t("Choose what to sync: glab-teleport sync <source> [target]\n", "เลือกสิ่งที่จะ sync: glab-teleport sync <ต้นทาง> [ปลายทาง]\n")
                              + "\n".join(f"  {c['source']}  →  {c['target']}" for c in choices))
-        pick = term.ask(t("What do you want to sync?", "ต้องการ sync อะไร"),
-                        [term.item(i, c["source"], f"→ {c['target']} · {(c['started'] or '')[:16].replace('T', ' ')}",
-                                   tag=c["kind"]) for i, c in enumerate(choices)])
-        if pick is None:
+        from .wizard import pick_sync
+        picked = pick_sync(s)
+        if not picked:
             return 0
-        source, target = choices[pick]["source"], choices[pick]["target"]
+        source, target = picked
     source = clean_path(source)
     src_gl = _connect("source", config.side_url("source", getattr(args, "source_url", None)), args.insecure)
     kind = "group" if src_gl.group(source) else "project" if src_gl.project(source) else None
     if not kind:
         raise SystemExit(t("'{p}' was not found on the source GitLab", "ไม่พบ '{p}' ใน GitLab ต้นทาง", p=source))
     target = clean_path(target) if target else history.infer_target(work, kind, source)
-    if not target:
-        raise SystemExit(t("'{p}' hasn't been teleported yet, so there is nothing to sync. Teleport it first, or give the target: "
-                           "glab-teleport sync {p} <target>",
-                           "'{p}' ยังไม่เคยถูกย้าย จึงยังไม่มีอะไรให้ sync กรุณาย้ายก่อน หรือระบุปลายทาง: glab-teleport sync {p} <ปลายทาง>", p=source))
+    if not target:  # never teleported with this tool: suggest where it belongs and ask
+        from .wizard import guess_target, load_lists
+        guess = guess_target(kind, source, load_lists(s)[1], history.known_pairs(work))
+        if guess and sys.stdin.isatty() and term.confirm(t("Sync {a} → {b}?", "sync {a} → {b} หรือไม่", a=source, b=guess), True):
+            target = guess
+        else:
+            raise SystemExit(t("Where should '{p}' go on the target? Run: glab-teleport sync {p} <target>",
+                               "ต้องระบุปลายทางของ '{p}': glab-teleport sync {p} <ปลายทาง>", p=source)
+                             + (t("  (suggested: {g})", "  (แนะนำ: {g})", g=guess) if guess else ""))
     prev = history.previous(work, kind, source) or {}
     opts = prev.get("options") or {}
     if not args.layout:
@@ -187,4 +189,5 @@ def sync(args, source=None, target=None):
     args.sync, args.overwrite = True, not args.no_overwrite
     args.relocate = False
     args.include = args.exclude = None
-    return teleport(args, kind, [source], target, components)
+    s.opts.update({k: getattr(args, k, None) for k in OPT_KEYS})
+    return teleport(args, kind, [source], target, components, s=s)

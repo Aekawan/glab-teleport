@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-10-06
+
+### Added
+- `sync` works for any group or project, not only earlier teleports: pick “Another group/project…” in the menu, or run
+  `glab-teleport sync <source> [target]`. The target is suggested from history, names and existing projects.
+- Sync plans tell refs that are merely behind (updated) from refs changed on the target (kept, never overwritten).
+
+### Changed
+- The picker gives labels priority over descriptions in narrow terminals.
+- The sync list shows the real target project path.
+
 ## [0.2.0] — 2026-10-06
 
 ### Added

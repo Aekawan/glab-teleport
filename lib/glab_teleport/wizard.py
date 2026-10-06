@@ -205,3 +205,57 @@ def run(args):
             s.opts.update({o: True for o in picked})
             break
     return teleport(args, kind, srcs, dst, comps, s=s, interactive=True)
+
+
+def guess_target(kind, source, dst_inv, pairs):
+    """Where `source` most likely belongs on the target: earlier runs first, then names."""
+    from .match import norm, score_pair
+    if kind == "project":
+        if source in pairs:
+            return pairs[source]
+        leaf = norm(source.rsplit("/", 1)[-1])
+        cands = [p["path_with_namespace"] for p in dst_inv["projects"] if norm(p["path"]) == leaf]
+        ranked = sorted(cands, key=lambda c: -((score_pair(source, c) or (0,))[0]))
+        return ranked[0] if ranked else None
+    sug = suggestions(source, dst_inv["groups"], pairs)
+    return sug[0] if sug else None
+
+
+def pick_sync(s):
+    """Choose what to sync: an earlier teleport, or any group/project on the source. Returns (source, target) or None."""
+    from .history import sync_targets
+    choices = sync_targets(s.work)
+    rows = [term.item(f"hist:{i}", c["source"], f"→ {c['target']} · {(c['started'] or '')[:16].replace('T', ' ')}", tag=c["kind"])
+            for i, c in enumerate(choices)]
+    rows += [term.item("other:group", t("Another group…", "group อื่น…"),
+                       t("any group on the source, even one that was never teleported", "เลือก group ใดก็ได้จากต้นทาง แม้ยังไม่เคยย้าย")),
+             term.item("other:project", t("Another project…", "project อื่น…"),
+                       t("any project on the source", "เลือก project ใดก็ได้จากต้นทาง"))]
+    pick = term.ask(t("What do you want to sync?", "ต้องการ sync อะไร"), rows, subtitle=f"{s.src.url}  →  {s.dst.url}")
+    if pick is None:
+        return None
+    if pick.startswith("hist:"):
+        c = choices[int(pick[5:])]
+        return c["source"], c["target"]
+    kind = pick.split(":", 1)[1]
+    src_inv, dst_inv = load_lists(s)
+    pairs = known_pairs(s.work)
+    if kind == "group":
+        source = term.ask(t("Source group", "group ต้นทาง"), tree(src_inv["groups"], src_inv["projects"], pairs), subtitle=s.src.url)
+    else:
+        source = term.ask(t("Source project", "project ต้นทาง"),
+                          [term.item(p["path_with_namespace"], p["path_with_namespace"].rsplit("/", 1)[1], (p.get("last_activity_at") or "")[:10],
+                                     p["path_with_namespace"].rsplit("/", 1)[0] + "/",
+                                     tag=("→ " + pairs[p["path_with_namespace"]]) if p["path_with_namespace"] in pairs else "")
+                           for p in src_inv["projects"]], subtitle=s.src.url)
+    if not source:
+        return None
+    guess = guess_target(kind, source, dst_inv, pairs)
+    rows = [term.item(guess, guess, t("suggested", "แนะนำ"), tag="★")] if guess else []
+    rows += [r for r in tree(dst_inv["groups"], dst_inv["projects"]) if r["value"] != guess]
+    title = t("Target group", "group ปลายทาง") if kind == "group" else \
+        t("Target project, or a group to place it in", "project ปลายทาง หรือ group ที่จะวาง project")
+    d = term.ask(title, rows, custom=t("use", "ใช้"), subtitle=s.dst.url)
+    if d is None:
+        return None
+    return source, (d[1] if isinstance(d, tuple) else d)

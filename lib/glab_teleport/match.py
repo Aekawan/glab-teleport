@@ -148,9 +148,16 @@ def describe_sync(cmp):
         return t("target repository is empty", "repository ปลายทางยังว่าง")
     parts = []
     if cmp["missing"]:
-        parts.append(t("{n} refs missing", "ขาด {n} refs", n=len(cmp["missing"])))
-    if cmp["different"]:
+        parts.append(t("{n} new refs", "ref ใหม่ {n}", n=len(cmp["missing"])))
+    behind, diverged = cmp.get("behind"), cmp.get("diverged")
+    if behind is None and cmp["different"]:
         parts.append(t("{n} refs differ", "ต่างกัน {n} refs", n=len(cmp["different"])))
+    if behind:
+        parts.append(t("{n} refs behind", "ตามหลัง {n} refs", n=len(behind)))
+    if diverged:
+        names = ", ".join(r.split("/", 2)[-1] for r in diverged[:3]) + ("…" if len(diverged) > 3 else "")
+        parts.append(t("⚠ {n} changed on the target ({r}) — kept, not overwritten", "⚠ ปลายทางมี commit ของตัวเอง {n} ({r}) — จะไม่เขียนทับ",
+                       n=len(diverged), r=names))
     return ", ".join(parts)
 
 

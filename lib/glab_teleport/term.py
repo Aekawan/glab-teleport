@@ -324,7 +324,9 @@ class Picker:
                 lines.append(body + self._line([(meta, j("2"))], W - meta_col, fill=base)[0])
                 continue
             lw = 5 + width(it["prefix"] + it["label"] + ("  " + it["tag"] if it["tag"] else ""))
-            mw = min(width(meta) + 2, max(W // 2, W - lw - 4)) if meta else 0
+            mw = min(width(meta) + 2, max(0, W - lw - 2)) if meta else 0   # the label wins; the description gets what is left
+            if mw < 14:
+                mw = 0                                                        # too narrow to be useful: hide it
             body, _ = self._line(segs + self._label(it, base), W - mw, fill=base)
             tail = (self._line([(meta, j("2"))], mw - 1, fill=base)[0] + (f"\x1b[{base}m \x1b[0m" if base else " ")) if meta else ""
             lines.append(body + tail)

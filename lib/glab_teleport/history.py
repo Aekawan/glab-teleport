@@ -35,8 +35,11 @@ def runs(work):
         except ValueError:
             continue
         if rep.get("mode") in ("teleport", "sync"):
-            out.append({**{k: rep.get(k) for k in ("kind", "source", "target", "layout", "components", "options", "started", "mode")},
-                        "dir": f.parent, "projects": len(rep.get("projects", []))})
+            row = {k: rep.get(k) for k in ("kind", "source", "target", "layout", "components", "options", "started", "mode")}
+            projects = rep.get("projects", [])
+            if rep.get("kind") == "project" and len(projects) == 1 and projects[0].get("target"):
+                row["target"] = projects[0]["target"]   # the real project path, not the group it was placed in
+            out.append({**row, "dir": f.parent, "projects": len(projects)})
     return out
 
 

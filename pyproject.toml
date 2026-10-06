@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "glab-teleport"
+dynamic = ["version"]
+description = "Move GitLab groups and projects to another GitLab — branches, tags, CI/CD variables in every environment scope, runners and settings — verified on arrival."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["gitlab", "migration", "cli", "ci-cd", "devops"]
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Version Control :: Git",
+]
+
+[project.urls]
+Homepage = "https://github.com/Aekawan/glab-teleport"
+Issues = "https://github.com/Aekawan/glab-teleport/issues"
+
+[project.scripts]
+glab-teleport = "glab_teleport.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "lib" }
+packages = ["glab_teleport"]
+
+[tool.setuptools.dynamic]
+version = { attr = "glab_teleport.__version__" }

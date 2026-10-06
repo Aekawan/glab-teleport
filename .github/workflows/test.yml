@@ -1,0 +1,29 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.9", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Unit and end-to-end tests
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          python -m unittest discover -s tests -v
+      - name: CLI starts through the npm launcher
+        run: node bin/glab-teleport.js --version && node bin/glab-teleport.js --help

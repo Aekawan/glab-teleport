@@ -181,7 +181,7 @@ glab-teleport sync payments --prune         # also remove what was deleted on th
 3. **Verify:** everything that was transferred is compared again, read-only.
 4. **Report:**
    - a terminal summary, plus `report.md` and `report.json` in `~/.glab-teleport/runs/`
-   - runner registration tokens go to a `runner-tokens.txt` beside the report (mode 600)
+   - runner registration tokens are kept in one file, `~/.glab-teleport/runner-tokens.txt` (mode 600); the report names each runner that still has to be registered and stops reminding you once it is online
 
 When subgroups are flattened, their CI/CD variables are attached **only to the projects that used to live under them**. They are never spread across the whole group, so secrets stay with the team that owned them.
 

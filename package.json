@@ -29,6 +29,7 @@
   "files": [
     "bin/",
     "lib/glab_teleport/",
+    "!**/__pycache__",
     "README.md",
     "README.th.md",
     "LICENSE",

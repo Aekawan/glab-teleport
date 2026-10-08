@@ -4,7 +4,7 @@ import json
 import re
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 import helpers  # noqa: F401
@@ -30,7 +30,7 @@ class SkillTest(unittest.TestCase):
     def test_install(self):
         d = tempfile.mkdtemp()
         out = io.StringIO()
-        with redirect_stdout(out), self.assertRaises(SystemExit):
+        with redirect_stdout(out), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             cli.main(["skill", "install", "--dir", d, "--json"])
         term.set_json(False)
         res = json.loads(out.getvalue())

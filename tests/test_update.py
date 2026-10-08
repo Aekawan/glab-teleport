@@ -6,7 +6,7 @@ import os
 import subprocess
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -36,7 +36,7 @@ class UpdateTest(unittest.TestCase):
     def run_update(self, latest, kind="npm", **kw):
         args = argparse.Namespace(**{"check": False, "yes": False, **kw})
         with mock.patch.object(update, "latest", return_value=latest), mock.patch.object(update, "install_kind", return_value=kind), \
-                redirect_stdout(io.StringIO()):
+                redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             code = update.run(args)
         return code, term.RESULT
 

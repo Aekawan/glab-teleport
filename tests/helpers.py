@@ -27,6 +27,7 @@ class FakeGitLab:
 
     def close(self):
         self.srv.shutdown()
+        self.srv.server_close()
 
     def _handler(self):
         fake = self

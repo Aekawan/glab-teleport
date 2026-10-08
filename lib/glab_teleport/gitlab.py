@@ -48,7 +48,9 @@ def post_form(url, data, insecure=False):
         with urllib.request.urlopen(req, timeout=60, context=ctx) as r:
             return json.loads(r.read())
     except urllib.error.HTTPError as e:
-        raise ApiError(e.code, "POST", urllib.parse.urlsplit(url).path, e.read(500).decode(errors="replace"))
+        msg = e.read(500).decode(errors="replace")
+        e.close()
+        raise ApiError(e.code, "POST", urllib.parse.urlsplit(url).path, msg)
 
 
 def oauth_exchange(url, auth, data, insecure=False):
@@ -124,6 +126,7 @@ class GitLab:
                     return (json.loads(raw) if raw else None), resp.headers
             except urllib.error.HTTPError as e:
                 msg = e.read(2000).decode(errors="replace")
+                e.close()
                 if e.code == 401 and self.auth.get("type") == "oauth" and not refreshed:
                     try:
                         refreshed = self.refresh(force=True)

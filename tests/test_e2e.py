@@ -9,7 +9,7 @@ import tempfile
 import threading
 import unittest
 import urllib.parse
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -206,8 +206,9 @@ class TeleportEndToEnd(unittest.TestCase):
                                              config.host_key(self.dst.url): {"type": "pat", "token": "dst-token"}}, secret=True)
 
     def tearDown(self):
-        self.src.srv.shutdown()
-        self.dst.srv.shutdown()
+        for side in (self.src, self.dst):
+            side.srv.shutdown()
+            side.srv.server_close()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_project_teleport_and_report(self):
@@ -248,7 +249,7 @@ class TeleportEndToEnd(unittest.TestCase):
         from glab_teleport import cli, term
         term.RESULT = None
         out = io.StringIO()
-        with redirect_stdout(out):
+        with redirect_stdout(out), redirect_stderr(io.StringIO()):                # progress goes to stderr in JSON mode
             with self.assertRaises(SystemExit) as ex:
                 cli.main([*argv, "--json", "--source-url", self.src.url, "--target-url", self.dst.url])
         term.set_json(False)

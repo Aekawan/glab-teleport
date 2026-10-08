@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- The npm package never includes `__pycache__`, even when published with `--ignore-scripts`.
+- HTTP error responses are closed right away (no `ResourceWarning` on newer Python).
+- `npm test` prints only the test summary.
+
 ## [0.4.1] — 2026-10-08
 
 ### Added

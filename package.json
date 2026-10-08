@@ -1,6 +1,6 @@
 {
   "name": "glab-teleport",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Move GitLab groups and projects to another GitLab — branches, tags, CI/CD variables in every environment scope, runners and settings — verified on arrival.",
   "keywords": [
     "gitlab",

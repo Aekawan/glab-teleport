@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.1] — 2026-10-08
 
 ### Added
 - `glab-teleport update` installs the latest version (npm or pipx) and refreshes every installed copy of the agent skill.

@@ -23,7 +23,12 @@ if (!python) {
 }
 
 process.on("SIGINT", () => {}); // let Python handle Ctrl-C and restore the terminal
-const env = { ...process.env, PYTHONPATH: [lib, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter), PYTHONDONTWRITEBYTECODE: "1" };
+const env = {
+  ...process.env,
+  PYTHONPATH: [lib, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter),
+  PYTHONDONTWRITEBYTECODE: "1",
+  GLAB_TELEPORT_NODE: process.execPath, // `glab-teleport update` uses the npm that belongs to this Node
+};
 const r = spawnSync(python, ["-m", "glab_teleport", ...process.argv.slice(2)], { stdio: "inherit", env });
 if (r.error) {
   console.error(`Could not start ${python}: ${r.error.message}`);

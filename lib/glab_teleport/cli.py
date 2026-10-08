@@ -9,7 +9,8 @@ from .gitlab import connect
 from .i18n import resolve_lang, set_lang, t
 from .plan import COMPONENTS, clean_path, parse_only
 
-COMMANDS = ("group", "project", "sync", "verify", "skill", "report", "audit", "refs", "repoint", "login", "logout", "doctor", "config")
+COMMANDS = ("group", "project", "sync", "verify", "skill", "report", "audit", "refs", "repoint", "login", "logout", "doctor", "config",
+            "update")
 
 
 def _common(p):
@@ -157,6 +158,13 @@ docs: https://github.com/Aekawan/glab-teleport""",
                    help=t("agents to install for: claude, codex, opencode, pi or all (default: the ones found on this machine)",
                           "ติดตั้งให้ agent เหล่านี้: claude, codex, opencode, pi หรือ all (ค่าเริ่มต้น: ตัวที่พบในเครื่องนี้)"))
     p.add_argument("--dir", help=t("install into this skills folder instead", "ติดตั้งลงโฟลเดอร์นี้แทน"))
+    p.add_argument("--refresh", action="store_true", help=t("only update copies that are already installed", "อัปเดตเฉพาะ skill ที่ติดตั้งไว้แล้ว"))
+    _common(p)
+
+    p = sub.add_parser("update", help=t("update glab-teleport to the latest version (and the agent skill)",
+                                        "อัปเดต glab-teleport เป็นเวอร์ชันล่าสุด (รวมถึง skill ของ AI agent)"))
+    p.add_argument("--check", action="store_true", help=t("only check whether a new version exists", "ตรวจอย่างเดียวว่ามีเวอร์ชันใหม่หรือไม่"))
+    p.add_argument("-y", "--yes", action="store_true", help=t("install without asking (needed with --json)", "ติดตั้งโดยไม่ถาม (ต้องใส่เมื่อใช้ --json)"))
     _common(p)
 
     p = sub.add_parser("ui")
@@ -216,6 +224,9 @@ def dispatch(args):
         return refs(args)
     if cmd == "skill":
         return skill(args)
+    if cmd == "update":
+        from . import update
+        return update.run(args)
     if cmd == "repoint":
         return repoint(args)
 
@@ -263,6 +274,15 @@ def skill(args):
     if args.action == "path":
         term.emit({"ok": True, "path": str(src)})
         term.out(str(src))
+        return 0
+    if args.refresh:
+        done = agents.refresh(src)
+        term.emit({"ok": True, "installed": done})
+        if not done:
+            term.out(t("No installed skill to refresh. Install it with: glab-teleport skill install",
+                       "ยังไม่ได้ติดตั้ง skill ติดตั้งด้วย: glab-teleport skill install"))
+        for i in done:
+            term.out(term.style("✓ ", "green") + (t("updated", "อัปเดตแล้ว") if i["changed"] else t("up to date", "ล่าสุดแล้ว")) + f"  {i['path']}")
         return 0
     if args.dir:
         plan = {Path(args.dir).expanduser(): []}

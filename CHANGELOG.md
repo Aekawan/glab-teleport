@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `glab-teleport update` installs the latest version (npm or pipx) and refreshes every installed copy of the agent skill.
+  `update --check` only checks. In JSON mode it only reports unless `--yes` is given.
+- `glab-teleport doctor` says when a newer version is available.
+- `skill install --refresh` updates only the skill copies that are already installed.
+- Maintainers: `npm version patch|minor` runs the tests, syncs the Python version, dates the changelog, tags and pushes;
+  `npm publish` runs the tests first.
+
 ## [0.4.0] — 2026-10-06
 
 ### Added

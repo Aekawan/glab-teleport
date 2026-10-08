@@ -103,6 +103,15 @@ pipx install git+https://github.com/Aekawan/glab-teleport
 - **git**
 - **git-lfs:** จำเป็นเฉพาะ repository ที่ใช้ Git LFS
 
+### อัปเดต
+
+```bash
+glab-teleport update           # ติดตั้งเวอร์ชันล่าสุด พร้อมอัปเดต skill ของ AI agent
+glab-teleport update --check   # ตรวจอย่างเดียวว่ามีเวอร์ชันใหม่ไหม
+```
+
+`glab-teleport doctor` จะแจ้งด้วยเมื่อมีเวอร์ชันใหม่ (เวอร์ชันก่อน 0.4.1 ยังไม่มีคำสั่ง `update` ให้รัน `npm install -g glab-teleport@latest` หนึ่งครั้งก่อน)
+
 ## เริ่มต้นใช้งาน
 
 ### 1. ตั้งภาษาไทยเป็นค่าเริ่มต้น (ถ้าต้องการ)
@@ -421,6 +430,11 @@ git clone https://github.com/Aekawan/glab-teleport && cd glab-teleport
 python3 -m unittest discover -s tests      # ไม่ต้องติดตั้งไลบรารีเพิ่ม
 node bin/glab-teleport.js --help
 ```
+
+การออกเวอร์ชันใหม่ (สำหรับผู้ดูแล):
+1. เขียนรายการเปลี่ยนแปลงไว้ใต้ `## [Unreleased]` ใน `CHANGELOG.md` แล้ว commit
+2. รัน `npm version patch` (หรือ `minor`) ระบบจะรัน test ตั้งเลขเวอร์ชันให้ตรงกันทั้งใน `package.json` และแพ็กเกจ Python ใส่วันที่ใน changelog แล้ว commit `Release x.y.z` สร้าง tag `vx.y.z` และ push ให้
+3. รัน `npm publish` ระบบจะรัน test ให้อีกรอบก่อน publish
 
 โค้ดเป็น Python 3.9+ standard library ล้วนๆ อยู่ใน `lib/glab_teleport/` (CLI, การวางแผน, การย้าย, การตรวจสอบ และรายงาน) พร้อมตัวเรียกขนาดเล็กสำหรับ npm ข้อความที่แสดงต่อผู้ใช้เขียนเป็น `t("English", "ไทย")` ไว้ตรงจุดที่ใช้งาน
 

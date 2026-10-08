@@ -30,6 +30,8 @@ glab-teleport --version --json            # missing? → npm install -g glab-tel
 glab-teleport doctor --json
 ```
 
+If doctor says a newer version is available, or a command or flag is missing, tell the user. `glab-teleport update` installs the latest version and refreshes this skill. Ask first, then run it with `--json --yes`.
+
 `doctor` returns `checks[]` with `ok`, `level` and `hint`. If source/target are not configured or not signed in, ask the user to run `glab-teleport login` themselves, then re-run doctor. DNS failures usually mean VPN.
 
 In a sandboxed agent (e.g. Codex), the CLI needs network access to both GitLabs and writes to `~/.glab-teleport` and `~/.config/glab-teleport`. If a command fails with a network or permission error, ask to run it with network access / outside the sandbox. Don't work around it.

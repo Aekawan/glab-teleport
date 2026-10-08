@@ -36,6 +36,10 @@
   ],
   "scripts": {
     "test": "python3 -m unittest discover -s tests",
+    "preversion": "npm test",
+    "version": "node scripts/sync-version.js && git add lib/glab_teleport/__init__.py CHANGELOG.md",
+    "postversion": "git push --follow-tags && echo 'Next: npm publish'",
+    "prepublishOnly": "npm test",
     "prepack": "find lib -name __pycache__ -prune -exec rm -rf {} + || true"
   },
   "engines": {

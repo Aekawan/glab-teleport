@@ -220,6 +220,13 @@ def cmd_doctor(args):
         term.out(f"  {sym} {text}" + (term.style(f"  → {hint}", "yellow") if hint and not good else ""))
 
     term.out(term.style("glab-teleport doctor", "bold") + term.style(f"  {__version__}", "dim"))
+    from .update import latest, parse
+    new = latest(timeout=3, npm_fallback=False)
+    if new and parse(new) > parse(__version__):
+        line(False, t("glab-teleport {v} · {n} is available", "glab-teleport {v} · มีเวอร์ชัน {n} แล้ว", v=__version__, n=new),
+             "glab-teleport update", warn=True)
+    elif new:
+        line(True, t("glab-teleport {v} (latest)", "glab-teleport {v} (ล่าสุด)", v=__version__))
     line(sys.version_info >= (3, 9), f"Python {sys.version.split()[0]}", t("Python 3.9+ required", "ต้องใช้ Python 3.9 ขึ้นไป"))
     line(bool(shutil.which("git")), "git", t("install git", "ติดตั้ง git"))
     line(bool(shutil.which("git-lfs")), "git-lfs", t("only needed for repositories that use Git LFS", "จำเป็นเฉพาะ repository ที่ใช้ Git LFS"), warn=True)

@@ -64,3 +64,24 @@ def install(src, folder):
 def opencode_sees_twice(home=None):
     f = folders(home)
     return sum((d / NAME / "SKILL.md").exists() for d in f.values()) > 1
+
+
+def installed(home=None):
+    """Skill folders that already hold a copy of the skill."""
+    return [d for d in folders(home).values() if (d / NAME / "SKILL.md").exists()]
+
+
+def _files(root):
+    root = Path(root)
+    return {p.relative_to(root): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+def refresh(src, home=None):
+    """Bring every installed copy up to date with `src` -> [{"path", "changed"}]."""
+    out = []
+    for d in installed(home):
+        changed = _files(src) != _files(d / NAME)
+        if changed:
+            install(src, d)
+        out.append({"path": str(d / NAME), "changed": changed})
+    return out

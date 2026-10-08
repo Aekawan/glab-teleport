@@ -91,6 +91,15 @@ pipx install git+https://github.com/Aekawan/glab-teleport
 
 Requirements: Python 3.9 or newer (the one bundled with macOS works) and `git`. `git-lfs` is only needed for repositories that use LFS.
 
+### Update
+
+```bash
+glab-teleport update           # install the latest version and refresh the agent skill
+glab-teleport update --check   # only check
+```
+
+`glab-teleport doctor` also tells you when a new version is out. (Versions before 0.4.1 have no `update` command: run `npm install -g glab-teleport@latest` once.)
+
 ## Quick start
 
 ```bash
@@ -267,6 +276,11 @@ git clone https://github.com/Aekawan/glab-teleport && cd glab-teleport
 python3 -m unittest discover -s tests      # no third-party packages needed
 node bin/glab-teleport.js --help
 ```
+
+Releasing (maintainers):
+1. Write the notes under `## [Unreleased]` in `CHANGELOG.md` and commit.
+2. Run `npm version patch` (or `minor`). It runs the tests, sets the same version in `package.json` and the Python package, dates the changelog section, commits `Release x.y.z`, tags `vx.y.z` and pushes.
+3. Run `npm publish`. It runs the tests again first.
 
 The code is plain Python 3.9+ standard library: `lib/glab_teleport/` (CLI, planner, transfer, verification, reports) plus a small Node launcher for npm. User-facing text is written as `t("English", "ไทย")` next to where it is used.
 

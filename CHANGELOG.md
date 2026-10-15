@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.0] — 2026-10-15
 
 ### Added
 - `glab-teleport ci-update <file> <group|project>...` puts one `.gitlab-ci.yml` into many projects through the API:

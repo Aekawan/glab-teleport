@@ -13,7 +13,7 @@ import tempfile
 
 import helpers  # noqa: F401
 from glab_teleport import cli, term
-from glab_teleport.ci import render
+from glab_teleport.ci import DEFAULT, SAME_AS_INTO, command_line, render
 
 NEW = "include:\n  - project: 'infra/ci-templates'\n    file: 'templates/deploy-aws.yml'\n\nvariables:\n  APPROVERS: \"a@x.com\"\n"
 
@@ -23,6 +23,7 @@ class Server:
         self.group = {"id": 1, "full_path": "apps"}
         self.projects = {}
         self.files, self.branches, self.mrs, self.commits = {}, {}, [], []
+        self.extra = {}         # pid -> branch names besides main
         self.srv = ThreadingHTTPServer(("127.0.0.1", 0), self.handler())
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.srv.server_port}"
@@ -51,8 +52,12 @@ class Server:
                 p, qs = urllib.parse.unquote(u.path[len("/api/v4"):]), dict(urllib.parse.parse_qsl(u.query))
                 if p == "/user":
                     return self.send(200, {"username": "tester"})
-                if p == "/groups/apps":
+                if p == "/groups/" + srv.group["full_path"]:
                     return self.send(200, srv.group)
+                if p == "/groups":
+                    return self.send(200, [srv.group] if qs.get("search", "") in srv.group["full_path"] else [])
+                if p == "/projects":
+                    return self.send(200, [x for x in srv.projects.values() if qs.get("search", "") in x["path_with_namespace"]])
                 if p == "/groups/1/projects":
                     return self.send(200, list(srv.projects.values()))
                 if p == "/groups/1/descendant_groups":
@@ -65,6 +70,9 @@ class Server:
                 if m:
                     return self.send(200, [r for r in srv.mrs if r["pid"] == int(m[1]) and r["source_branch"] == qs["source_branch"]
                                            and r["state"] == "opened"])
+                m = re.match(r"/projects/(\d+)/repository/branches$", p)
+                if m:
+                    return self.send(200, [{"name": b} for b in ["main", *srv.extra.get(int(m[1]), [])]])
                 m = re.match(r"/projects/(\d+)/repository/branches/(.+)$", p)
                 if m:
                     return self.send(200, {}) if (int(m[1]), m[2]) in srv.branches else self.send(404)
@@ -148,6 +156,44 @@ class CiUpdateTest(unittest.TestCase):
         code, res = self.run_ci("--yes", "--all")
         self.assertEqual(self.states(res)["apps/web"], "open")
         self.assertEqual(len(self.api.mrs), 2)
+
+    def test_short_path_resolves_to_the_one_match(self):
+        self.api.group["full_path"] = "org/apps"
+        for p in self.api.projects.values():
+            p["path_with_namespace"] = "org/" + p["path_with_namespace"]
+        code, res = cli_json("ci-update", str(self.file), "apps", "--target-url", self.api.url)
+        self.assertEqual((code, res["targets"]), (0, ["org/apps"]))
+        self.assertEqual(self.states(res)["org/apps/web"], "update")
+        code, res = cli_json("ci-update", str(self.file), "nope", "--target-url", self.api.url)
+        self.assertEqual((code, res["ok"]), (1, False))
+        self.assertIn("'nope'", res["error"])
+
+    def test_no_targets_without_a_terminal_explains(self):
+        code, res = cli_json("ci-update", str(self.file), "--target-url", self.api.url)
+        self.assertEqual(code, 1)
+        self.assertIn("ci-update <", res["error"])
+
+    def test_into_and_from_pick_the_first_branch_each_project_has(self):
+        self.api.extra = {10: ["develop", "staging"]}
+        self.api.files[(10, "develop")] = "old: 2\n"
+        self.api.files[(10, "staging")] = self.api.files[(11, "staging")] = "x: 1\n"
+        code, res = self.run_ci("--into", "develop,@default")
+        rows = {r["project"]: r for r in res["projects"]}
+        self.assertEqual((rows["apps/web"]["into"], rows["apps/web"]["from"]), ("develop", "develop"))
+        self.assertEqual((rows["apps/api"]["into"], rows["apps/api"]["state"]), ("main", "same"))
+        code, res = self.run_ci("--into", "develop", "--from", "staging", "--yes")
+        rows = {r["project"]: r for r in res["projects"]}
+        self.assertEqual((rows["apps/web"]["from"], rows["apps/web"]["into"]), ("staging", "develop"))
+        self.assertIn("no branch develop", rows["apps/api"]["note"])
+        pid, commit = self.api.commits[0]
+        self.assertEqual((pid, commit["start_branch"]), (10, "staging"))
+
+    def test_command_line_repeats_the_choices(self):
+        cmd = lambda into, start: command_line("ci.yml", ["apps"], "target", {"into": into, "from": start})
+        self.assertEqual(cmd([DEFAULT], [SAME_AS_INTO]), "glab-teleport ci-update ci.yml apps")
+        self.assertEqual(cmd(["develop"], ["develop"]), "glab-teleport ci-update ci.yml apps --into develop")
+        self.assertEqual(cmd(["develop"], ["main"]), "glab-teleport ci-update ci.yml apps --from main --into develop")
+        self.assertEqual(cmd(["develop"], [DEFAULT]), "glab-teleport ci-update ci.yml apps --from @default --into develop")
 
     def test_render_keeps_project_value(self):
         self.assertIn('APPROVERS: "me@x.com"', render(NEW, 'variables:\n  APPROVERS: "me@x.com"\n', ["APPROVERS"]))

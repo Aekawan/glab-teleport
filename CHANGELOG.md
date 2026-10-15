@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `ci-update` walks you through it like `sync` when run in a terminal without arguments: a group or projects → which ones →
+  the branch to take the file from → the branch to open the MRs into (Esc goes back). It is also in the `glab-teleport` menu.
+- `ci-update --into develop,@default` merges into the first listed branch each project has; `--from` sets the branch the
+  change starts from. In a terminal without these flags you pick from the branches the projects have.
+
+### Changed
+- `ci-update --json`: each project has `into` and `from` instead of `branch`.
+
+### Fixed
+- `ci-update` finds a group or project by a short path, e.g. the source path `payments` when it lives at
+  `platform/payments` on the target, instead of saying it does not exist.
+
 ## [0.5.0] — 2026-10-15
 
 ### Added

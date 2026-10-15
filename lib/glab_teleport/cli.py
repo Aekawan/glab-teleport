@@ -133,8 +133,9 @@ docs: https://github.com/Aekawan/glab-teleport""",
 
     p = sub.add_parser("ci-update", help=t("put one .gitlab-ci.yml into many projects (a branch + merge request each)",
                                            "ใส่ .gitlab-ci.yml ไฟล์เดียวกันให้หลาย project (เปิด branch + merge request ให้ทีละ project)"))
-    p.add_argument("file", help=t("the new file on this machine", "ไฟล์ใหม่ในเครื่องนี้"))
-    p.add_argument("targets", nargs="+", metavar="GROUP_OR_PROJECT", help=t("groups (all projects below) or projects", "group (ทุก project ข้างใต้) หรือ project"))
+    p.add_argument("file", nargs="?", help=t("the new file on this machine (omit to be asked)", "ไฟล์ใหม่ในเครื่องนี้ (ไม่ใส่ = ถามทีละขั้น)"))
+    p.add_argument("targets", nargs="*", metavar="GROUP_OR_PROJECT",
+                   help=t("groups (all projects below) or projects; omit to pick from a list", "group (ทุก project ข้างใต้) หรือ project ไม่ใส่ = เลือกจากรายการ"))
     p.add_argument("--side", choices=["target", "source"], default="target",
                    help=t("which GitLab to change (default: target)", "GitLab ที่จะแก้ (ค่าเริ่มต้น: target)"))
     p.add_argument("--exclude", action="append", metavar="PATH", help=t("skip these subgroups/projects (repeatable)", "ข้าม subgroup/project นี้ (ระบุซ้ำได้)"))
@@ -142,6 +143,12 @@ docs: https://github.com/Aekawan/glab-teleport""",
     p.add_argument("--keep-var", action="append", metavar="NAME",
                    help=t("keep each project's own value of this variable (repeatable)", "คงค่าตัวแปรนี้ของแต่ละ project ไว้ (ระบุซ้ำได้)"))
     p.add_argument("--path", default=".gitlab-ci.yml", help=t("file in the repository (default .gitlab-ci.yml)", "ไฟล์ใน repository (ค่าเริ่มต้น .gitlab-ci.yml)"))
+    p.add_argument("--into", metavar="BRANCHES",
+                   help=t("merge into the first of these branches each project has, e.g. develop,@default (default: the project's default branch)",
+                          "merge เข้า branch แรกในรายการที่ project มี เช่น develop,@default (ค่าเริ่มต้น: default branch ของ project)"))
+    p.add_argument("--from", dest="from_", metavar="BRANCHES",
+                   help=t("start the change from these branches, same rules as --into (default: the --into branch)",
+                          "แตก branch ใหม่ออกจาก branch นี้ ใช้กติกาเดียวกับ --into (ค่าเริ่มต้น: branch เดียวกับ --into)"))
     p.add_argument("--branch", default="ci/update-gitlab-ci", help=t("branch to create (default ci/update-gitlab-ci)", "branch ที่จะสร้าง (ค่าเริ่มต้น ci/update-gitlab-ci)"))
     p.add_argument("--title", help=t("commit message and merge request title", "ข้อความ commit และชื่อ merge request"))
     p.add_argument("--dry-run", action="store_true", help=t("show the plan only", "แสดงแผนอย่างเดียว ไม่เปลี่ยนแปลงอะไร"))

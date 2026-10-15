@@ -220,9 +220,12 @@ glab-teleport ci-update ./gitlab-ci.yml payments --yes           # เปิด 
 glab-teleport ci-update ./gitlab-ci.yml payments --keep-var APPROVERS --exclude payments/legacy
 ```
 
+- รัน `glab-teleport ci-update` เฉยๆ (หรือเลือก *อัปเดต .gitlab-ci.yml* ในเมนู `glab-teleport`) จะพาเลือกทีละขั้นแบบ `sync`: ทั้ง group หรือเลือก project → ตัวไหน → เอาไฟล์จาก branch ไหนมาแก้ → เปิด MR เข้า branch ไหน กด Esc เพื่อย้อนกลับ และท้ายขั้นตอนจะแสดงคำสั่งเต็มไว้ใช้ครั้งหน้า
+- ใส่ path สั้นๆ เช่น `payments` ได้ ระบบจะหาให้ว่าอยู่ใต้ group ไหนบนปลายทาง (เช่น `platform/payments`) ถ้าเจอหลายที่จะให้เลือก
 - ทำกับ GitLab ปลายทาง (ใส่ `--side source` ถ้าจะใช้อีกฝั่ง) และข้าม project ที่ archive แล้วหรือ repository ว่าง
 - project ที่ยังไม่มีไฟล์นี้จะถูกข้าม ยกเว้นใส่ `--all`
 - project ที่ไฟล์เหมือนแล้ว หรือยังมี merge request จากรอบก่อนเปิดอยู่ จะไม่ถูกแตะ รันซ้ำได้อย่างปลอดภัย
+- `--into develop,@default` เปิด MR เข้า branch แรกในรายการที่ project นั้นมี (`@default` = default branch ของ project) ส่วน `--from` คือ branch ตั้งต้นที่จะแตก branch ใหม่ออกมา (ค่าเริ่มต้น: branch เดียวกับที่ merge เข้า) ถ้าไม่ใส่และรันใน terminal จะขึ้นรายการ branch ให้เลือก
 - `--keep-var NAME` คงค่าตัวแปรเดิมของแต่ละ project ไว้ เช่นรายชื่อผู้อนุมัติ
 - ตัวเลือกอื่น: `--branch` (ค่าเริ่มต้น `ci/update-gitlab-ci`), `--title`, `--path` สำหรับไฟล์อื่น
 

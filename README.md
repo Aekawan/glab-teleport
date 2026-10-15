@@ -149,9 +149,12 @@ glab-teleport ci-update ./gitlab-ci.yml payments --yes           # open the merg
 glab-teleport ci-update ./gitlab-ci.yml payments --keep-var APPROVERS --exclude payments/legacy
 ```
 
+- Run `glab-teleport ci-update` (or choose *Update .gitlab-ci.yml* in `glab-teleport`) to be walked through it like `sync`: a group or projects → which ones → the branch to take the file from → the branch to open the MRs into. Esc goes back a step, and the matching command is shown at the end for next time.
+- A short path such as `payments` is found under its new parent (e.g. `platform/payments`); if several match, you choose.
 - It works on the target GitLab (`--side source` for the other one) and skips archived and empty projects.
 - Projects without the file are skipped unless you pass `--all`.
 - Projects that already have the file, or still have an open merge request from an earlier run, are left alone, so re-running is safe.
+- `--into develop,@default` opens each MR into the first of these branches the project has (`@default` = its default branch). `--from` picks the branch the change starts from (default: the same branch). Without them, in a terminal, you pick from the branches the projects have.
 - `--keep-var NAME` keeps each project's own value of a variable, e.g. its approvers.
 - Other options: `--branch` (default `ci/update-gitlab-ci`), `--title`, `--path` for a different file.
 

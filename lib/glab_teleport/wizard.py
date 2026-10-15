@@ -110,9 +110,15 @@ def run(args):
                 term.item("group", t("A group", "ทั้ง group"), t("every project and subgroup inside it", "ทุก project และ subgroup ภายใน")),
                 term.item("project", t("Projects", "เลือก project"), t("pick one or more (Tab)", "เลือกได้หลายรายการ (Tab)")),
                 term.item("sync", t("Sync", "Sync"), t("update an earlier teleport with the latest from the source",
-                                                       "อัปเดตสิ่งที่เคยย้ายแล้วให้ตามต้นทางล่าสุด"))], subtitle=sub)
+                                                       "อัปเดตสิ่งที่เคยย้ายแล้วให้ตามต้นทางล่าสุด")),
+                term.item("ci", t("Update .gitlab-ci.yml", "อัปเดต .gitlab-ci.yml"),
+                          t("put one CI file into many projects on the target, a merge request each",
+                            "ใส่ไฟล์ CI เดียวกันให้หลาย project บนปลายทาง เปิด merge request ให้ทีละ project"))], subtitle=sub)
             if kind is None:
                 return 0
+            if kind == "ci":
+                from . import ci
+                return ci.run(argparse.Namespace(**{**vars(args), **ci.DEFAULTS}))
             if kind == "sync":
                 from .run import sync
                 for k, v in dict(only=None, prune=False, no_overwrite=False, layout=None).items():

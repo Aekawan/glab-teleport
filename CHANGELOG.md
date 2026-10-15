@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- `glab-teleport ci-update <file> <group|project>...` puts one `.gitlab-ci.yml` into many projects through the API:
+  a branch, a commit and a merge request per project. Plans first; `--yes` applies. Skips projects that already match or
+  have an open MR from an earlier run. `--keep-var` keeps a project's own variable value, `--all` adds the file where missing.
+
 ### Fixed
 - The npm package never includes `__pycache__`, even when published with `--ignore-scripts`.
 - HTTP error responses are closed right away (no `ResourceWarning` on newer Python).

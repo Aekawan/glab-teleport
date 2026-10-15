@@ -80,5 +80,6 @@ Every command prints exactly one JSON document on stdout. Human-readable progres
 - `report latest --json`: the full result document of the latest run.
 - `audit [src] [dst] --json`: `{"summary": {"synced": n, "outdated": n, "empty": n, "conflict": n, "missing": n}, "by_group": {...}, "rows": [{"source", "target", "match", "category", "sync"}], "target_only": [...], "report_path"}`
 - `refs [target] --json`: `{"references": [{"project", "kind", "where", "found", "fix"}]}` (secrets in URLs are masked)
+- `ci-update <file> <targets>... --json`: `{"summary": {"update", "create", "same", "open", "skip": n}, "projects": [{"project", "id", "branch", "state", "note", "mr"?, "ok"?}], "confirmed"}`; with `--yes` also `"opened": [mr urls], "failed": [...]`
 - `repoint --json`: `{"script": "/abs/path/repoint.sh", "repositories": n}`
 - `config --json`: `{"lang", "source", "target", "file"}`

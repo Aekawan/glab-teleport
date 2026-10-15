@@ -205,9 +205,26 @@ glab-teleport verify <ต้นทาง> <ปลายทาง>               
 glab-teleport audit [group ต้นทาง] [group ปลายทาง]     # สถานะการย้ายทั้งระบบ
 glab-teleport refs [ปลายทาง]                          # ค้นหาจุดที่ยังอ้างถึง GitLab ต้นทาง
 glab-teleport repoint                                 # สร้างสคริปต์เปลี่ยน git remote ในเครื่องของทีม
+glab-teleport ci-update <ไฟล์> <group|project>...     # ใส่ .gitlab-ci.yml เดียวกันให้หลาย project พร้อมเปิด MR
 glab-teleport report [latest|<รหัสรอบ>]               # ดูประวัติหรือสรุปผลของแต่ละรอบ
 glab-teleport login | logout | doctor | config
 ```
+
+### เปลี่ยน `.gitlab-ci.yml` หลาย project พร้อมกัน
+
+`ci-update` ใส่ไฟล์ CI เดียวกันให้ทุก project ใน group ผ่าน API โดยไม่ต้อง clone แต่ละ project จะได้ branch, commit และ merge request อย่างละหนึ่ง
+
+```bash
+glab-teleport ci-update ./gitlab-ci.yml payments                 # ดูแผนว่า project ไหนจะถูกแก้
+glab-teleport ci-update ./gitlab-ci.yml payments --yes           # เปิด merge request จริง
+glab-teleport ci-update ./gitlab-ci.yml payments --keep-var APPROVERS --exclude payments/legacy
+```
+
+- ทำกับ GitLab ปลายทาง (ใส่ `--side source` ถ้าจะใช้อีกฝั่ง) และข้าม project ที่ archive แล้วหรือ repository ว่าง
+- project ที่ยังไม่มีไฟล์นี้จะถูกข้าม ยกเว้นใส่ `--all`
+- project ที่ไฟล์เหมือนแล้ว หรือยังมี merge request จากรอบก่อนเปิดอยู่ จะไม่ถูกแตะ รันซ้ำได้อย่างปลอดภัย
+- `--keep-var NAME` คงค่าตัวแปรเดิมของแต่ละ project ไว้ เช่นรายชื่อผู้อนุมัติ
+- ตัวเลือกอื่น: `--branch` (ค่าเริ่มต้น `ci/update-gitlab-ci`), `--title`, `--path` สำหรับไฟล์อื่น
 
 ตัวอย่างการใช้งาน:
 

@@ -10,7 +10,7 @@ from .i18n import resolve_lang, set_lang, t
 from .plan import COMPONENTS, clean_path, parse_only
 
 COMMANDS = ("group", "project", "sync", "verify", "skill", "report", "audit", "refs", "repoint", "login", "logout", "doctor", "config",
-            "update")
+            "update", "ci-update")
 
 
 def _common(p):
@@ -131,6 +131,24 @@ docs: https://github.com/Aekawan/glab-teleport""",
     p.add_argument("-o", "--output", default="repoint.sh", help=t("output file (default repoint.sh)", "ไฟล์ผลลัพธ์ (ค่าเริ่มต้น repoint.sh)"))
     _common(p)
 
+    p = sub.add_parser("ci-update", help=t("put one .gitlab-ci.yml into many projects (a branch + merge request each)",
+                                           "ใส่ .gitlab-ci.yml ไฟล์เดียวกันให้หลาย project (เปิด branch + merge request ให้ทีละ project)"))
+    p.add_argument("file", help=t("the new file on this machine", "ไฟล์ใหม่ในเครื่องนี้"))
+    p.add_argument("targets", nargs="+", metavar="GROUP_OR_PROJECT", help=t("groups (all projects below) or projects", "group (ทุก project ข้างใต้) หรือ project"))
+    p.add_argument("--side", choices=["target", "source"], default="target",
+                   help=t("which GitLab to change (default: target)", "GitLab ที่จะแก้ (ค่าเริ่มต้น: target)"))
+    p.add_argument("--exclude", action="append", metavar="PATH", help=t("skip these subgroups/projects (repeatable)", "ข้าม subgroup/project นี้ (ระบุซ้ำได้)"))
+    p.add_argument("--all", action="store_true", help=t("also add the file to projects that don't have one", "เพิ่มไฟล์ให้ project ที่ยังไม่มีด้วย"))
+    p.add_argument("--keep-var", action="append", metavar="NAME",
+                   help=t("keep each project's own value of this variable (repeatable)", "คงค่าตัวแปรนี้ของแต่ละ project ไว้ (ระบุซ้ำได้)"))
+    p.add_argument("--path", default=".gitlab-ci.yml", help=t("file in the repository (default .gitlab-ci.yml)", "ไฟล์ใน repository (ค่าเริ่มต้น .gitlab-ci.yml)"))
+    p.add_argument("--branch", default="ci/update-gitlab-ci", help=t("branch to create (default ci/update-gitlab-ci)", "branch ที่จะสร้าง (ค่าเริ่มต้น ci/update-gitlab-ci)"))
+    p.add_argument("--title", help=t("commit message and merge request title", "ข้อความ commit และชื่อ merge request"))
+    p.add_argument("--dry-run", action="store_true", help=t("show the plan only", "แสดงแผนอย่างเดียว ไม่เปลี่ยนแปลงอะไร"))
+    p.add_argument("-y", "--yes", action="store_true", help=t("don't ask for confirmation", "ไม่ต้องถามยืนยัน"))
+    p.add_argument("--jobs", type=int, default=6, metavar="N", help=t("projects in parallel (default 6)", "จำนวน project ที่ทำพร้อมกัน (ค่าเริ่มต้น 6)"))
+    _common(p)
+
     p = sub.add_parser("login", help=t("set URLs and sign in to the source and target GitLab", "ตั้งค่า URL และเข้าสู่ระบบ GitLab ต้นทางและปลายทาง"))
     p.add_argument("--side", choices=["source", "target", "both"], default="both")
     p.add_argument("--method", choices=["web-token", "oauth", "paste"], help=t("skip the sign-in method menu", "ข้ามเมนูเลือกวิธีเข้าสู่ระบบ"))
@@ -229,6 +247,9 @@ def dispatch(args):
         return update.run(args)
     if cmd == "repoint":
         return repoint(args)
+    if cmd == "ci-update":
+        from . import ci
+        return ci.run(args)
 
 
 def refs(args):

@@ -132,11 +132,28 @@ glab-teleport verify <source> <target>               # read-only comparison and 
 glab-teleport audit [source-group] [target-group]    # migration status of a whole instance
 glab-teleport refs [target]                          # find leftovers pointing at the source GitLab
 glab-teleport repoint                                # script that repoints teammates' local clones
+glab-teleport ci-update <file> <group|project>...    # one .gitlab-ci.yml into many projects, an MR each
 glab-teleport report [latest|<run>]                  # list runs or reprint a summary
 glab-teleport login | logout | doctor | config
 ```
 
 Shortcut: `glab-teleport payments platform/payments` works out whether the source is a group or a project.
+
+### Roll out a new `.gitlab-ci.yml`
+
+`ci-update` puts the same CI file into every project of a group, through the API (no clones): one branch, one commit and one merge request per project.
+
+```bash
+glab-teleport ci-update ./gitlab-ci.yml payments                 # plan: which projects would change
+glab-teleport ci-update ./gitlab-ci.yml payments --yes           # open the merge requests
+glab-teleport ci-update ./gitlab-ci.yml payments --keep-var APPROVERS --exclude payments/legacy
+```
+
+- It works on the target GitLab (`--side source` for the other one) and skips archived and empty projects.
+- Projects without the file are skipped unless you pass `--all`.
+- Projects that already have the file, or still have an open merge request from an earlier run, are left alone, so re-running is safe.
+- `--keep-var NAME` keeps each project's own value of a variable, e.g. its approvers.
+- Other options: `--branch` (default `ci/update-gitlab-ci`), `--title`, `--path` for a different file.
 
 ### What to transfer
 

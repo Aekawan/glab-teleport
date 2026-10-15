@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.6.0] — 2026-10-15
 
 ### Added
 - `ci-update` walks you through it like `sync` when run in a terminal without arguments: a group or projects → which ones →
